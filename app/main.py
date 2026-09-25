@@ -9,8 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
-from app.schemas import SummarizeRequest, SummarizeResponse, TranscriptResponse
+from app.schemas import MAX_POSTS, SummarizeRequest, SummarizeResponse, TranscriptResponse
 from app.services.summarizer import SummarizerError, summarize
+from app.tones import DEFAULT_TONE, TONES
 from app.services.youtube import (
     TranscriptError,
     extract_video_id,
@@ -27,7 +28,15 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"max_posts": settings.max_posts})
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {"max_posts": _max_posts(), "tones": TONES.values(), "default_tone": DEFAULT_TONE},
+    )
+
+
+def _max_posts() -> int:
+    return max(1, min(settings.max_posts, MAX_POSTS))
 
 
 @app.get("/health")
@@ -56,15 +65,27 @@ async def summarize_video(payload: SummarizeRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    num_posts = min(payload.num_posts, settings.max_posts)
+    if payload.num_posts > _max_posts():
+        raise HTTPException(
+            status_code=422, detail=f"الحد الأقصى لعدد المنشورات هو {_max_posts()}"
+        )
     try:
         transcript = await run_in_threadpool(
             fetch_transcript, video_id, settings.transcript_languages
         )
-        result = await run_in_threadpool(summarize, transcript, payload.language, num_posts)
+        result = await run_in_threadpool(
+            summarize, transcript, payload.language, payload.num_posts, payload.tone
+        )
     except TranscriptError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except SummarizerError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return SummarizeResponse(video_id=video_id, **result.model_dump())
+    return SummarizeResponse(
+        video_id=video_id,
+        language=payload.language,
+        tone=payload.tone,
+        char_limit=TONES[payload.tone].char_limit,
+        requested_posts=payload.num_posts,
+        **result.model_dump(),
+    )

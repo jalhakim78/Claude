@@ -1,4 +1,3 @@
-const X_LIMIT = 280;
 const YT_RE = /(youtube\.com|youtu\.be|youtube-nocookie\.com)\/|^[\w-]{11}$/;
 
 const $ = (id) => document.getElementById(id);
@@ -12,6 +11,16 @@ const toastEl = $("toast");
 const resultEl = $("result");
 const numPostsEl = $("num-posts");
 const postTemplate = $("post-template");
+const languageEl = $("language");
+
+const LANGUAGE_LABELS = { ar: "العربية", en: "English" };
+const TONE_LABELS = Object.fromEntries(
+  [...document.querySelectorAll('input[name="tone"]')].map((input) => [
+    input.value,
+    input.nextElementSibling.querySelector("strong").textContent,
+  ])
+);
+const PREFS_KEY = "yt2x-prefs";
 
 // ---------- Helpers ----------
 
@@ -77,23 +86,71 @@ async function copyText(text, button, toastMessage = "تم نسخ المنشور
 // X تحسب الأحرف بنقاط Unicode، لذا نستخدم [...text] بدل text.length
 const charCount = (text) => [...text].length;
 
-// ---------- Stepper ----------
+// ---------- عدد المنشورات ----------
 
-const maxPosts = Number(numPostsEl.dataset.max) || 5;
+const minPosts = Number(numPostsEl.min) || 1;
+const maxPosts = Number(numPostsEl.max) || 10;
+const decBtn = document.querySelector('[data-step="-1"]');
+const incBtn = document.querySelector('[data-step="1"]');
 
-function setNumPosts(value) {
-  const n = Math.min(Math.max(value, 1), maxPosts);
-  numPostsEl.value = numPostsEl.textContent = n;
-  document.querySelector('[data-step="-1"]').disabled = n <= 1;
-  document.querySelector('[data-step="1"]').disabled = n >= maxPosts;
+// يعيد العدد إن كان صحيحًا ضمن المدى، وإلا null
+function readNumPosts() {
+  const raw = numPostsEl.value.trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return n >= minPosts && n <= maxPosts ? n : null;
 }
 
-document.querySelectorAll("[data-step]").forEach((btn) =>
+function syncNumPosts() {
+  const n = readNumPosts();
+  numPostsEl.parentElement.classList.toggle("invalid", n === null);
+  decBtn.disabled = n !== null && n <= minPosts;
+  incBtn.disabled = n !== null && n >= maxPosts;
+}
+
+function setNumPosts(value) {
+  numPostsEl.value = Math.min(Math.max(Math.round(value) || minPosts, minPosts), maxPosts);
+  syncNumPosts();
+}
+
+[decBtn, incBtn].forEach((btn) =>
   btn.addEventListener("click", () =>
-    setNumPosts(Number(numPostsEl.textContent) + Number(btn.dataset.step))
+    setNumPosts((readNumPosts() ?? minPosts) + Number(btn.dataset.step))
   )
 );
-setNumPosts(Math.min(3, maxPosts));
+numPostsEl.addEventListener("input", syncNumPosts);
+// عند مغادرة الحقل نصحّح القيمة تلقائيًا إلى أقرب رقم مسموح
+numPostsEl.addEventListener("blur", () => {
+  if (readNumPosts() === null) setNumPosts(Number(numPostsEl.value));
+});
+
+// ---------- حفظ التفضيلات (اختياري؛ الصفحة تعمل بدونه) ----------
+
+function savePrefs() {
+  try {
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({
+        language: languageEl.value,
+        tone: form.elements.tone.value,
+        numPosts: readNumPosts(),
+      })
+    );
+  } catch {}
+}
+
+function loadPrefs() {
+  let prefs = {};
+  try {
+    prefs = JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {}
+  if (prefs.language in LANGUAGE_LABELS) languageEl.value = prefs.language;
+  if (prefs.tone in TONE_LABELS) form.elements.tone.value = prefs.tone;
+  setNumPosts(prefs.numPosts ?? Math.min(3, maxPosts));
+}
+
+loadPrefs();
+form.addEventListener("change", savePrefs);
 
 // ---------- Paste ----------
 
@@ -112,7 +169,7 @@ urlInput.addEventListener("input", () =>
 
 // ---------- Rendering ----------
 
-function renderPost(text) {
+function renderPost(text, limit, canShareToX) {
   const node = postTemplate.content.firstElementChild.cloneNode(true);
   const textEl = node.querySelector(".post-text");
   const countEl = node.querySelector(".count");
@@ -121,11 +178,16 @@ function renderPost(text) {
   const update = () => {
     const value = textEl.innerText.trim();
     const n = charCount(value);
-    countEl.textContent = `${n} / ${X_LIMIT}`;
-    countEl.classList.toggle("warn", n > X_LIMIT - 20 && n <= X_LIMIT);
-    countEl.classList.toggle("over", n > X_LIMIT);
-    shareEl.href = `https://x.com/intent/post?text=${encodeURIComponent(value)}`;
+    countEl.textContent = `${n} / ${limit}`;
+    countEl.classList.toggle("warn", n > limit * 0.93 && n <= limit);
+    countEl.classList.toggle("over", n > limit);
+    if (canShareToX) {
+      shareEl.href = `https://x.com/intent/post?text=${encodeURIComponent(value)}`;
+    }
   };
+
+  // منشورات LinkedIn أطول من حد X، لذا نكتفي بزر النسخ لها
+  shareEl.hidden = !canShareToX;
 
   textEl.textContent = text;
   textEl.addEventListener("input", update);
@@ -155,7 +217,17 @@ function renderResult(data) {
       return li;
     })
   );
-  $("posts").replaceChildren(...data.x_posts.map(renderPost));
+  const canShareToX = data.char_limit <= 280;
+  $("posts").replaceChildren(
+    ...data.posts.map((post) => renderPost(post, data.char_limit, canShareToX))
+  );
+  $("posts-meta").textContent =
+    `${data.posts.length} منشورات · ${TONE_LABELS[data.tone] ?? data.tone} · ${LANGUAGE_LABELS[data.language] ?? data.language}`;
+
+  const noteEl = $("posts-note");
+  noteEl.hidden = data.posts.length >= data.requested_posts;
+  noteEl.textContent = `تم توليد ${data.posts.length} من أصل ${data.requested_posts} منشورات فقط؛ المحتوى لم يكفِ لأفكار مختلفة أكثر.`;
+
   resultEl.hidden = false;
   resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -180,6 +252,14 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
+  const numPosts = readNumPosts();
+  if (numPosts === null) {
+    syncNumPosts();
+    showStatus(`عدد المنشورات يجب أن يكون رقمًا صحيحًا من ${minPosts} إلى ${maxPosts}`, true);
+    numPostsEl.focus();
+    return;
+  }
+
   resultEl.hidden = true;
   statusEl.hidden = true;
   loaderTitle.textContent = "جارٍ جلب نص الفيديو…";
@@ -196,8 +276,9 @@ form.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
-        language: form.elements.language.value,
-        num_posts: Number(numPostsEl.textContent),
+        language: languageEl.value,
+        tone: form.elements.tone.value,
+        num_posts: numPosts,
       }),
     });
 

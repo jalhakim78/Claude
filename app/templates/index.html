@@ -15,7 +15,7 @@
     <header class="hero">
       <span class="badge">YouTube → X</span>
       <h1>حوّل أي فيديو إلى منشورات جاهزة</h1>
-      <p>الصق رابط فيديو يوتيوب، ونلخّصه لك ونكتب منشورات قصيرة جاهزة للنشر على X.</p>
+      <p>الصق رابط فيديو يوتيوب، واختر اللغة والأسلوب، ونكتب لك منشورات جاهزة للنشر على X أو LinkedIn.</p>
     </header>
 
     <form id="summarize-form" class="card composer" novalidate>
@@ -27,28 +27,49 @@
         <button type="button" id="paste-btn" class="ghost-btn">لصق</button>
       </div>
 
-      <div class="controls">
-        <div class="options">
-          <div class="segmented" role="radiogroup" aria-label="لغة المنشورات">
-            <input type="radio" name="language" id="lang-ar" value="ar" checked>
-            <label for="lang-ar">العربية</label>
-            <input type="radio" name="language" id="lang-en" value="en">
-            <label for="lang-en">English</label>
-          </div>
+      <div class="settings">
+        <label class="field">
+          <span class="field-label">لغة المنشورات</span>
+          <span class="select-wrap">
+            <select id="language" name="language">
+              <option value="ar" selected>العربية</option>
+              <option value="en">English (الإنجليزية)</option>
+            </select>
+          </span>
+          <small class="field-hint">تُترجم وتُلخّص بهذه اللغة أيًّا كانت لغة الفيديو</small>
+        </label>
 
-          <div class="stepper" aria-label="عدد المنشورات">
+        <div class="field">
+          <label class="field-label" for="num-posts">عدد المنشورات</label>
+          <div class="number-field">
             <button type="button" data-step="-1" aria-label="إنقاص">−</button>
-            <output id="num-posts" data-max="{{ max_posts }}">3</output>
-            <span>منشورات</span>
+            <input type="number" id="num-posts" name="num_posts" inputmode="numeric"
+                   min="1" max="{{ max_posts }}" step="1" value="3" required>
             <button type="button" data-step="1" aria-label="زيادة">+</button>
           </div>
+          <small class="field-hint">من 1 إلى {{ max_posts }} منشورات</small>
         </div>
-
-        <button type="submit" id="submit-btn" class="primary-btn">
-          <span class="btn-label">لخّص الفيديو</span>
-          <span class="spinner" aria-hidden="true"></span>
-        </button>
       </div>
+
+      <fieldset class="tones">
+        <legend class="field-label">أسلوب ونبرة المنشورات</legend>
+        <div class="tone-grid">
+          {% for tone in tones %}
+          <input type="radio" name="tone" id="tone-{{ tone.id }}" value="{{ tone.id }}"
+                 {% if tone.id == default_tone %}checked{% endif %}>
+          <label class="tone-card" for="tone-{{ tone.id }}">
+            <span class="tone-icon" aria-hidden="true">{{ tone.icon }}</span>
+            <strong>{{ tone.label }}</strong>
+            <small>{{ tone.hint }}</small>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <button type="submit" id="submit-btn" class="primary-btn">
+        <span class="btn-label">لخّص الفيديو</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
     </form>
 
     <div id="status" class="status" role="alert" hidden></div>
@@ -72,20 +93,24 @@
       <article class="card video">
         <img id="thumb" alt="" loading="lazy">
         <div>
-          <h2 id="title"></h2>
-          <p id="summary"></p>
+          <h2 id="title" dir="auto"></h2>
+          <p id="summary" dir="auto"></p>
           <details>
             <summary>أهم النقاط</summary>
-            <ul id="key-points"></ul>
+            <ul id="key-points" dir="auto"></ul>
           </details>
         </div>
       </article>
 
       <div class="card posts-box">
         <div class="posts-head">
-          <h3>المنشورات الجاهزة</h3>
+          <div>
+            <h3>المنشورات الجاهزة</h3>
+            <p id="posts-meta" class="posts-meta"></p>
+          </div>
           <button type="button" id="copy-all" class="ghost-btn"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ الكل</span></button>
         </div>
+        <p id="posts-note" class="posts-note" hidden></p>
         <div id="posts" class="posts"></div>
       </div>
     </section>
@@ -95,7 +120,7 @@
 
   <template id="post-template">
     <article class="post">
-      <p class="post-text" contenteditable="true" spellcheck="false"></p>
+      <p class="post-text" dir="auto" contenteditable="true" spellcheck="false"></p>
       <footer>
         <span class="count"></span>
         <div class="post-actions">

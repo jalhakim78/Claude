@@ -72,12 +72,23 @@ for seg in result.segments:   # المقاطع مع التوقيت
     print(seg.start, seg.text)
 ```
 
+## خيارات التوليد
+
+| الخيار | القيم | ملاحظات |
+|---|---|---|
+| `language` | `ar` / `en` | لغة الناتج بغض النظر عن لغة الفيديو (يُترجَم ويُلخَّص بها) |
+| `tone` | `linkedin` / `x` / `marketing` | مهني/جاد (حتى 3000 حرف)، تفاعلي/جذاب (280)، حماسي/تسويقي (280) |
+| `num_posts` | من 1 إلى 10 | إن أعاد النموذج عددًا أقل يُطلب منه استكمال الناقص (حتى محاولتين)، والزائد يُحذف |
+
+تعليمات كل أسلوب موجودة في `app/tones.py`، ويمكن تعديلها أو إضافة أساليب جديدة من هناك،
+وتظهر تلقائيًا في الواجهة.
+
 ## الـ API
 
 `POST /api/summarize`
 
 ```json
-{ "url": "https://youtu.be/VIDEO_ID", "language": "ar", "num_posts": 3 }
+{ "url": "https://youtu.be/VIDEO_ID", "language": "ar", "tone": "x", "num_posts": 3 }
 ```
 
 الاستجابة:
@@ -85,10 +96,14 @@ for seg in result.segments:   # المقاطع مع التوقيت
 ```json
 {
   "video_id": "VIDEO_ID",
+  "language": "ar",
+  "tone": "x",
+  "char_limit": 280,
+  "requested_posts": 3,
   "title": "...",
   "summary": "...",
   "key_points": ["..."],
-  "x_posts": ["..."]
+  "posts": ["..."]
 }
 ```
 

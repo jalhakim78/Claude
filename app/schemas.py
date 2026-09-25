@@ -1,14 +1,17 @@
 """نماذج البيانات (طلبات واستجابات الـ API)."""
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
+
+from app.tones import DEFAULT_TONE, LanguageId, ToneId
+
+MIN_POSTS, MAX_POSTS = 1, 10
 
 
 class SummarizeRequest(BaseModel):
     url: str = Field(..., description="رابط فيديو يوتيوب")
-    language: Literal["ar", "en"] = "ar"
-    num_posts: int = Field(3, ge=1, le=10)
+    language: LanguageId = Field("ar", description="لغة الناتج بغض النظر عن لغة الفيديو")
+    tone: ToneId = Field(DEFAULT_TONE, description="أسلوب ونبرة المنشورات")
+    num_posts: int = Field(3, ge=MIN_POSTS, le=MAX_POSTS, description="عدد المنشورات")
 
 
 class VideoSummary(BaseModel):
@@ -17,11 +20,15 @@ class VideoSummary(BaseModel):
     title: str
     summary: str
     key_points: list[str]
-    x_posts: list[str]
+    posts: list[str]
 
 
 class SummarizeResponse(VideoSummary):
     video_id: str
+    language: LanguageId
+    tone: ToneId
+    char_limit: int
+    requested_posts: int
 
 
 class TranscriptSegmentOut(BaseModel):

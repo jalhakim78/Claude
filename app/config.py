@@ -18,7 +18,7 @@ class Settings:
     transcript_languages: list[str] = field(
         default_factory=lambda: _split_csv(os.getenv("TRANSCRIPT_LANGUAGES", "ar,en"))
     )
-    max_posts: int = int(os.getenv("MAX_POSTS", "5"))
+    max_posts: int = int(os.getenv("MAX_POSTS", "10"))
     youtube_proxy_url: str | None = os.getenv("YOUTUBE_PROXY_URL") or None
 
 

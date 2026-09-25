@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
@@ -26,18 +27,43 @@ def test_summarize_success(monkeypatch):
     monkeypatch.setattr(
         main,
         "summarize",
-        lambda transcript, language, num_posts: VideoSummary(
-            title="عنوان", summary="ملخص", key_points=["نقطة"], x_posts=["منشور"] * num_posts
+        lambda transcript, language, num_posts, tone: VideoSummary(
+            title="عنوان", summary="ملخص", key_points=["نقطة"],
+            posts=[f"{tone}-{language}-{i}" for i in range(num_posts)],
         ),
     )
     response = client.post(
         "/api/summarize",
-        json={"url": "https://youtu.be/dQw4w9WgXcQ", "num_posts": 2},
+        json={
+            "url": "https://youtu.be/dQw4w9WgXcQ",
+            "num_posts": 7,
+            "language": "en",
+            "tone": "linkedin",
+        },
     )
     assert response.status_code == 200
     body = response.json()
     assert body["video_id"] == "dQw4w9WgXcQ"
-    assert len(body["x_posts"]) == 2
+    assert body["posts"][0] == "linkedin-en-0"
+    assert len(body["posts"]) == body["requested_posts"] == 7
+    assert (body["tone"], body["language"], body["char_limit"]) == ("linkedin", "en", 3000)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"num_posts": 0}, {"num_posts": 11}, {"num_posts": 2.5}, {"tone": "funny"}, {"language": "fr"}],
+)
+def test_summarize_rejects_invalid_options(extra):
+    response = client.post("/api/summarize", json={"url": "https://youtu.be/dQw4w9WgXcQ", **extra})
+    assert response.status_code == 422
+
+
+def test_index_renders_controls():
+    html = client.get("/").text
+    assert '<select id="language"' in html
+    assert 'type="number" id="num-posts"' in html and 'max="10"' in html
+    for tone in ("linkedin", "x", "marketing"):
+        assert f'id="tone-{tone}"' in html
 
 
 def test_transcript_endpoint(monkeypatch):
