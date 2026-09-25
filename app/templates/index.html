@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ملخّص يوتيوب ← منشورات X</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <script id="account-data" type="application/json">{{ account | tojson }}</script>
+  <main class="page">
+    <div class="topbar">
+      <span class="brand">{{ site_name }}</span>
+      <button type="button" id="plan-pill" class="plan-pill"></button>
+    </div>
+
+    <header class="hero">
+      <span class="badge">YouTube → X</span>
+      <h1>حوّل أي فيديو إلى منشورات جاهزة</h1>
+      <p>الصق رابط فيديو يوتيوب، واختر اللغة والأسلوب، ونكتب لك منشورات جاهزة للنشر على X أو LinkedIn.</p>
+    </header>
+
+    <form id="summarize-form" class="card composer" novalidate>
+      <label for="url" class="sr-only">رابط الفيديو</label>
+      <div class="url-field">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>
+        <input type="url" id="url" dir="ltr" inputmode="url" autocomplete="off"
+               placeholder="https://www.youtube.com/watch?v=..." required>
+        <button type="button" id="paste-btn" class="ghost-btn">لصق</button>
+      </div>
+
+      <div class="settings">
+        <label class="field">
+          <span class="field-label">لغة المنشورات</span>
+          <span class="select-wrap">
+            <select id="language" name="language">
+              <option value="ar" selected>العربية</option>
+              <option value="en">English (الإنجليزية)</option>
+            </select>
+          </span>
+          <small class="field-hint">تُترجم وتُلخّص بهذه اللغة أيًّا كانت لغة الفيديو</small>
+        </label>
+
+        <div class="field">
+          <label class="field-label" for="num-posts" id="num-posts-label">عدد المنشورات</label>
+          <div class="number-field">
+            <button type="button" data-step="-1" aria-label="إنقاص">−</button>
+            <input type="number" id="num-posts" name="num_posts" inputmode="numeric"
+                   min="1" max="{{ max_posts }}" step="1" value="3" required>
+            <button type="button" data-step="1" aria-label="زيادة">+</button>
+          </div>
+          <small class="field-hint" id="num-posts-hint">من 1 إلى {{ max_posts }} منشورات</small>
+        </div>
+      </div>
+
+      <fieldset class="tones">
+        <legend class="field-label">أسلوب ونبرة المنشورات</legend>
+        <div class="tone-grid">
+          {% for tone in tones %}
+          <input type="radio" name="tone" id="tone-{{ tone.id }}" value="{{ tone.id }}"
+                 {% if tone.id == default_tone %}checked{% endif %}>
+          <label class="tone-card" for="tone-{{ tone.id }}">
+            <span class="tone-icon" aria-hidden="true">{{ tone.icon }}</span>
+            <strong>{{ tone.label }}</strong>
+            <small>{{ tone.hint }}</small>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <label class="toggle-row" for="thread">
+        <span class="toggle-text">
+          <strong>🧵 توليد ثريد لـ X</strong>
+          <small>سلسلة تغريدات متصلة ومرقّمة (مثل 1/6)، كل تغريدة ضمن 280 حرفًا</small>
+        </span>
+        <input type="checkbox" id="thread" name="thread" class="switch" role="switch">
+      </label>
+
+      <button type="submit" id="submit-btn" class="primary-btn">
+        <span class="btn-label">لخّص الفيديو</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+      <p id="quota-note" class="quota-note" hidden></p>
+    </form>
+
+    <div id="status" class="status" role="alert" hidden></div>
+
+    <section id="loader" class="card loader" role="status" aria-live="polite" hidden>
+      <div class="loader-head">
+        <span class="big-spinner" aria-hidden="true"></span>
+        <div>
+          <p id="loader-title" class="loader-title">جارٍ جلب نص الفيديو…</p>
+          <p class="loader-sub">قد يستغرق ذلك حتى دقيقة حسب طول الفيديو</p>
+        </div>
+      </div>
+      <div class="skeletons" aria-hidden="true">
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+      </div>
+    </section>
+
+    <section id="result" class="result" hidden>
+      <article class="card video">
+        <img id="thumb" alt="" loading="lazy">
+        <div>
+          <h2 id="title" dir="auto"></h2>
+          <p id="summary" dir="auto"></p>
+          <details>
+            <summary>أهم النقاط</summary>
+            <ul id="key-points" dir="auto"></ul>
+          </details>
+        </div>
+      </article>
+
+      <div class="card posts-box">
+        <div class="posts-head">
+          <div>
+            <h3>المنشورات الجاهزة</h3>
+            <p id="posts-meta" class="posts-meta"></p>
+          </div>
+          <button type="button" id="copy-all" class="ghost-btn"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ الكل</span></button>
+        </div>
+        <p id="posts-note" class="posts-note" hidden></p>
+        <div id="posts" class="posts"></div>
+      </div>
+
+      <div id="quotes-box" class="card quotes-box" hidden>
+        <h3>✨ اقتباسات ذهبية من الفيديو</h3>
+        <div id="quotes" class="quotes"></div>
+      </div>
+    </section>
+
+    <footer class="foot">يعمل بواسطة Claude</footer>
+  </main>
+
+  <template id="post-template">
+    <article class="post">
+      <label class="sr-only">نص المنشور</label>
+      <textarea class="post-text" dir="auto" rows="3" spellcheck="false"></textarea>
+      <footer>
+        <span class="count"></span>
+        <div class="post-actions">
+          <button type="button" class="copy-btn copy"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ</span></button>
+          <a class="ghost-btn share" target="_blank" rel="noopener">نشر على X</a>
+        </div>
+      </footer>
+    </article>
+  </template>
+
+  <template id="quote-template">
+    <figure class="quote">
+      <blockquote class="quote-text" dir="auto"></blockquote>
+      <figcaption class="quote-translation" dir="auto"></figcaption>
+      <button type="button" class="ghost-btn copy-quote"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ</span></button>
+    </figure>
+  </template>
+
+  <dialog id="upgrade-modal" class="modal" aria-labelledby="upgrade-title">
+    <form method="dialog" class="modal-close-form">
+      <button class="modal-close" aria-label="إغلاق">×</button>
+    </form>
+    <div class="modal-badge">⭐ الباقة الاحترافية</div>
+    <h2 id="upgrade-title">انتهت محاولاتك المجانية</h2>
+    <p class="modal-lead">
+      استخدمت محاولات التلخيص المجانية الـ <span id="modal-limit"></span>.
+      اشترك الآن واستمر في تحويل الفيديوهات إلى محتوى جاهز بلا توقف.
+    </p>
+    <ul class="plan-features">
+      <li>تلخيص غير محدود للفيديوهات</li>
+      <li>منشورات وثريدات خالية من العلامة المائية</li>
+      <li>كل الأساليب واللغات والاقتباسات الذهبية</li>
+    </ul>
+    <div class="modal-price"><span id="modal-price"></span><small>يمكنك الإلغاء في أي وقت</small></div>
+    <div class="pay-options">
+      <div id="stripe-option" hidden>
+        <button type="button" id="upgrade-btn" class="primary-btn">
+          <span class="btn-label">💳 الدفع بالبطاقة</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="pay-divider" class="pay-divider" hidden><span>أو</span></div>
+      <div id="paypal-option" hidden>
+        <div id="paypal-buttons" class="paypal-buttons"></div>
+        <p id="paypal-loading" class="paypal-loading">جارٍ تحميل أزرار PayPal…</p>
+      </div>
+      <p id="no-payment" class="modal-error" hidden>الدفع غير مُفعّل على هذا الخادم بعد.</p>
+    </div>
+    <p id="upgrade-error" class="modal-error" hidden></p>
+    <p class="modal-secure">🔒 الدفع آمن عبر Stripe وPayPal</p>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>
