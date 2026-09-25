@@ -30,7 +30,7 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # على ويندوز: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # للتشغيل فقط بدون أدوات الاختبار: requirements.txt
 
 cp .env.example .env             # ثم ضع مفتاح ANTHROPIC_API_KEY
 uvicorn app.main:app --reload
@@ -144,9 +144,27 @@ for seg in result.segments:   # المقاطع مع التوقيت
 | `POST /api/stripe/webhook` | يفعّل الخطة أو يلغيها حسب أحداث Stripe (المصدر الموثوق) |
 | `GET /api/me` | خطة الزائر وعدد محاولاته المتبقية |
 
+## الرفع على Render
+
+المشروع جاهز للرفع عبر ملف `render.yaml`:
+
+1. ارفع المستودع إلى GitHub.
+2. في [لوحة Render](https://dashboard.render.com) اختر **New > Blueprint** واربط المستودع.
+3. سيطلب Render القيم السرية: `ANTHROPIC_API_KEY` ومفاتيح Stripe، و`PUBLIC_BASE_URL` (اختياري؛ إن تُرك
+   فارغًا يُستخدم رابط `onrender.com` تلقائيًا في العلامة المائية وروابط الدفع).
+4. بعد أول رفع، أضف Webhook في Stripe يشير إلى `https://<رابطك>/api/stripe/webhook`.
+
+ملاحظات:
+- الخدمة على خطة `starter` لأن قاعدة البيانات (الحصص والاشتراكات) تُحفظ على قرص دائم في `/var/data`،
+  والأقراص الدائمة غير متاحة في الخطة المجانية. القرص يعني أيضًا نسخة واحدة من الخدمة، وتوقفًا لثوانٍ عند كل رفع.
+- لم نستخدم Vercel لأنه يشغّل التطبيق كدوال مؤقتة لا تحتفظ بالملفات (فتضيع قاعدة البيانات)،
+  ولها حد زمني قد لا يكفي لتلخيص فيديو طويل.
+- إن حظر يوتيوب عناوين Render، اضبط `YOUTUBE_PROXY_URL`.
+
 ## الاختبارات
 
 ```bash
+pip install -r requirements-dev.txt
 pytest
 ```
 

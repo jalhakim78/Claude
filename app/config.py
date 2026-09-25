@@ -23,7 +23,10 @@ class Settings:
 
     # الموقع والخطة المجانية
     site_name: str = os.getenv("SITE_NAME", "YT2X")
-    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    # على Render يُضبط RENDER_EXTERNAL_URL تلقائيًا، ويمكن تجاوزه بنطاقك الخاص عبر PUBLIC_BASE_URL
+    public_base_url: str = (
+        os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:8000"
+    ).rstrip("/")
     free_summary_limit: int = int(os.getenv("FREE_SUMMARY_LIMIT", "3"))
     database_path: str = os.getenv("DATABASE_PATH", "data/app.db")
 

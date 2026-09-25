@@ -1,0 +1,49 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# الرفع: من لوحة Render اختر New > Blueprint واربط هذا المستودع.
+services:
+  - type: web
+    name: yt2x
+    runtime: python
+    # الخطة المدفوعة مطلوبة للقرص الدائم الذي يحفظ قاعدة البيانات (الحصص والاشتراكات)
+    plan: starter
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: yt2x-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.15"
+      - key: DATABASE_PATH
+        value: /var/data/app.db
+      - key: SITE_NAME
+        value: YT2X
+      - key: FREE_SUMMARY_LIMIT
+        value: "3"
+      - key: MAX_POSTS
+        value: "10"
+      - key: CLAUDE_MODEL
+        value: claude-opus-5
+      - key: TRANSCRIPT_LANGUAGES
+        value: ar,en
+      - key: PRO_PRICE_LABEL
+        value: "$9 / شهريًا"
+      # القيم السرية: يطلبها Render عند إنشاء الخدمة ولا تُحفظ في المستودع
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # اختياري: نطاقك الخاص (مثل https://yt2x.com). إن تُرك فارغًا يُستخدم رابط onrender.com تلقائيًا
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # اختياري: بروكسي لطلبات يوتيوب إن حُظرت عناوين Render
+      - key: YOUTUBE_PROXY_URL
+        sync: false
