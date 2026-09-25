@@ -176,12 +176,22 @@
       <li>كل الأساليب واللغات والاقتباسات الذهبية</li>
     </ul>
     <div class="modal-price"><span id="modal-price"></span><small>يمكنك الإلغاء في أي وقت</small></div>
-    <button type="button" id="upgrade-btn" class="primary-btn">
-      <span class="btn-label">اشترك وترقَّ الآن</span>
-      <span class="spinner" aria-hidden="true"></span>
-    </button>
+    <div class="pay-options">
+      <div id="stripe-option" hidden>
+        <button type="button" id="upgrade-btn" class="primary-btn">
+          <span class="btn-label">💳 الدفع بالبطاقة</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="pay-divider" class="pay-divider" hidden><span>أو</span></div>
+      <div id="paypal-option" hidden>
+        <div id="paypal-buttons" class="paypal-buttons"></div>
+        <p id="paypal-loading" class="paypal-loading">جارٍ تحميل أزرار PayPal…</p>
+      </div>
+      <p id="no-payment" class="modal-error" hidden>الدفع غير مُفعّل على هذا الخادم بعد.</p>
+    </div>
     <p id="upgrade-error" class="modal-error" hidden></p>
-    <p class="modal-secure">🔒 الدفع آمن عبر Stripe</p>
+    <p class="modal-secure">🔒 الدفع آمن عبر Stripe وPayPal</p>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

@@ -14,10 +14,19 @@ CREATE TABLE IF NOT EXISTS visitors (
     plan                   TEXT    NOT NULL DEFAULT 'free',
     stripe_customer_id     TEXT,
     stripe_subscription_id TEXT,
+    paypal_subscription_id TEXT,
     created_at             TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_visitors_subscription ON visitors(stripe_subscription_id);
+"""
+
+# أعمدة أُضيفت بعد الإصدار الأول؛ تُضاف تلقائيًا لقواعد البيانات الموجودة
+MIGRATIONS = {
+    "paypal_subscription_id": "ALTER TABLE visitors ADD COLUMN paypal_subscription_id TEXT",
+}
+POST_MIGRATION_SQL = """
+CREATE INDEX IF NOT EXISTS idx_visitors_paypal ON visitors(paypal_subscription_id);
 """
 
 PLAN_FREE, PLAN_PRO = "free", "pro"
@@ -56,12 +65,21 @@ def _connect():
     conn = sqlite3.connect(path, timeout=10, isolation_level=None)  # autocommit
     conn.row_factory = sqlite3.Row
     if str(path) not in _initialized:
-        conn.executescript(SCHEMA)
+        _migrate(conn)
         _initialized.add(str(path))
     try:
         yield conn
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(visitors)")}
+    for column, sql in MIGRATIONS.items():
+        if column not in columns:
+            conn.execute(sql)
+    conn.executescript(POST_MIGRATION_SQL)
 
 
 def init_db() -> None:
@@ -122,6 +140,27 @@ def set_plan_by_subscription(subscription_id: str, plan: str) -> int:
         cur = conn.execute(
             """UPDATE visitors SET plan = ?, updated_at = CURRENT_TIMESTAMP
                WHERE stripe_subscription_id = ?""",
+            (plan, subscription_id),
+        )
+        return cur.rowcount
+
+
+def activate_pro_paypal(visitor_id: str, subscription_id: str) -> None:
+    with _connect() as conn:
+        _ensure(conn, visitor_id)
+        conn.execute(
+            """UPDATE visitors SET plan = ?, paypal_subscription_id = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (PLAN_PRO, subscription_id, visitor_id),
+        )
+
+
+def set_plan_by_paypal_subscription(subscription_id: str, plan: str) -> int:
+    """يغيّر خطة الزائر المرتبط باشتراك PayPal. يعيد عدد الصفوف المتأثرة."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """UPDATE visitors SET plan = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE paypal_subscription_id = ?""",
             (plan, subscription_id),
         )
         return cur.rowcount

@@ -13,3 +13,6 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "stripe_webhook_secret", None)
     monkeypatch.setattr(settings, "public_base_url", "http://yt2x.example")
     monkeypatch.setattr(settings, "site_name", "YT2X")
+    for name in ("paypal_client_id", "paypal_client_secret", "paypal_plan_id", "paypal_webhook_id"):
+        monkeypatch.setattr(settings, name, None)
+    monkeypatch.setattr(settings, "paypal_env", "sandbox")

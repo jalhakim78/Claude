@@ -128,11 +128,98 @@ function renderAccount() {
   label.textContent = isLocked() ? "🔒 اشترك لمتابعة التلخيص" : "لخّص الفيديو";
 }
 
+function showUpgradeError(message) {
+  const errorEl = $("upgrade-error");
+  errorEl.textContent = message;
+  errorEl.hidden = false;
+}
+
 function openUpgradeModal() {
   $("modal-limit").textContent = account.usage.limit ?? "";
   $("modal-price").textContent = account.price_label;
   $("upgrade-error").hidden = true;
+
+  const stripeOn = account.stripe_enabled;
+  const paypalOn = account.paypal?.enabled;
+  $("stripe-option").hidden = !stripeOn;
+  $("paypal-option").hidden = !paypalOn;
+  $("pay-divider").hidden = !(stripeOn && paypalOn);
+  $("no-payment").hidden = stripeOn || paypalOn;
+
   if (!modal.open) modal.showModal();
+  if (paypalOn) renderPayPalButtons();
+}
+
+// ---------- PayPal Smart Buttons ----------
+
+let paypalRendered = false;
+
+function loadPayPalSdk() {
+  if (window.paypal) return Promise.resolve(window.paypal);
+  return new Promise((resolve, reject) => {
+    const { client_id, currency } = account.paypal;
+    const script = document.createElement("script");
+    script.src =
+      "https://www.paypal.com/sdk/js?" +
+      new URLSearchParams({
+        "client-id": client_id,
+        vault: "true",
+        intent: "subscription",
+        currency,
+        components: "buttons",
+      });
+    script.dataset.namespace = "paypal";
+    script.onload = () => (window.paypal ? resolve(window.paypal) : reject(new Error("sdk")));
+    script.onerror = () => reject(new Error("sdk"));
+    document.head.append(script);
+  });
+}
+
+async function renderPayPalButtons() {
+  if (paypalRendered) return;
+  paypalRendered = true;
+  const loadingEl = $("paypal-loading");
+
+  try {
+    const paypal = await loadPayPalSdk();
+    await paypal
+      .Buttons({
+        style: { layout: "vertical", color: "gold", shape: "pill", label: "subscribe" },
+
+        // الخادم ينشئ الاشتراك ويربطه بهذا الزائر، ثم يعيد معرّفه للأزرار
+        createSubscription: async () => {
+          $("upgrade-error").hidden = true;
+          const response = await fetch("/api/paypal/subscription", { method: "POST" });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.id) {
+            throw new Error(data.detail || "تعذّر بدء الاشتراك عبر PayPal");
+          }
+          return data.id;
+        },
+
+        // بعد الموافقة ننتقل لصفحة النجاح التي تتحقق من الاشتراك وتفعّل الخطة
+        onApprove: (data) => {
+          const params = new URLSearchParams({
+            provider: "paypal",
+            subscription_id: data.subscriptionID,
+          });
+          window.location.href = `/checkout?${params}`;
+        },
+
+        onCancel: () => showToast("تم إلغاء عملية الدفع"),
+        onError: (err) => {
+          console.error(err);
+          showUpgradeError(err?.message || "حدث خطأ أثناء الدفع عبر PayPal، حاول مرة أخرى");
+        },
+      })
+      .render("#paypal-buttons");
+    loadingEl.hidden = true;
+  } catch (err) {
+    console.error(err);
+    paypalRendered = false; // نسمح بإعادة المحاولة عند فتح النافذة مجددًا
+    loadingEl.hidden = true;
+    showUpgradeError("تعذّر تحميل أزرار PayPal. تحقق من اتصالك أو من إعداد PAYPAL_CLIENT_ID.");
+  }
 }
 
 $("plan-pill").addEventListener("click", () => {
@@ -146,8 +233,7 @@ modal.addEventListener("click", (e) => {
 
 $("upgrade-btn").addEventListener("click", async () => {
   const btn = $("upgrade-btn");
-  const errorEl = $("upgrade-error");
-  errorEl.hidden = true;
+  $("upgrade-error").hidden = true;
   btn.disabled = true;
   btn.classList.add("loading");
   try {
@@ -156,8 +242,7 @@ $("upgrade-btn").addEventListener("click", async () => {
     if (!response.ok || !data.url) throw new Error(data.detail || "تعذّر بدء عملية الدفع");
     window.location.href = data.url; // الانتقال إلى صفحة الدفع في Stripe
   } catch (err) {
-    errorEl.textContent = err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message;
-    errorEl.hidden = false;
+    showUpgradeError(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message);
     btn.disabled = false;
     btn.classList.remove("loading");
   }

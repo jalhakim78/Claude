@@ -36,9 +36,28 @@ class Settings:
     stripe_webhook_secret: str | None = os.getenv("STRIPE_WEBHOOK_SECRET") or None
     pro_price_label: str = os.getenv("PRO_PRICE_LABEL", "$9 / شهريًا")
 
+    # PayPal (اشتراكات عبر Smart Buttons)
+    paypal_client_id: str | None = os.getenv("PAYPAL_CLIENT_ID") or None
+    paypal_client_secret: str | None = os.getenv("PAYPAL_CLIENT_SECRET") or None
+    paypal_plan_id: str | None = os.getenv("PAYPAL_PLAN_ID") or None
+    paypal_webhook_id: str | None = os.getenv("PAYPAL_WEBHOOK_ID") or None
+    # live للدفعات الحقيقية، sandbox للتجربة
+    paypal_env: str = os.getenv("PAYPAL_ENV", "live").lower()
+    paypal_currency: str = os.getenv("PAYPAL_CURRENCY", "USD").upper()
+
     @property
     def stripe_enabled(self) -> bool:
         return bool(self.stripe_secret_key and self.stripe_price_id)
+
+    @property
+    def paypal_enabled(self) -> bool:
+        return bool(self.paypal_client_id and self.paypal_client_secret and self.paypal_plan_id)
+
+    @property
+    def paypal_api_base(self) -> str:
+        if self.paypal_env == "sandbox":
+            return "https://api-m.sandbox.paypal.com"
+        return "https://api-m.paypal.com"
 
     @property
     def secure_cookies(self) -> bool:

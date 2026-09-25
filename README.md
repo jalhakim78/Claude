@@ -20,6 +20,8 @@
 │       ├── style.css
 │       └── app.js
 ├── tests/                   # اختبارات pytest
+├── Procfile                 # أمر تشغيل الخادم
+├── render.yaml              # إعدادات الرفع على Render
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -135,13 +137,27 @@ for seg in result.segments:   # المقاطع مع التوقيت
    و`customer.subscription.updated` و`customer.subscription.deleted`، وضع سرّه في `STRIPE_WEBHOOK_SECRET`.
    للتجربة محليًا: `stripe listen --forward-to localhost:8000/api/stripe/webhook`.
 
+إعداد PayPal (أزرار PayPal الذكية، اشتراك شهري):
+
+1. في [developer.paypal.com](https://developer.paypal.com) > **Apps & Credentials** أنشئ تطبيق REST
+   (Live للدفعات الحقيقية) وخذ منه `PAYPAL_CLIENT_ID` و`PAYPAL_CLIENT_SECRET`. يجب أن يكون المعرّفان
+   من التطبيق نفسه، وأن يطابق `PAYPAL_ENV` نوعه (`live` أو `sandbox`).
+2. أنشئ خطة اشتراك شهرية (Subscriptions > Plans) بنفس عملة `PAYPAL_CURRENCY`، وضع معرّفها (`P-...`) في `PAYPAL_PLAN_ID`.
+3. أضف Webhook في إعدادات التطبيق يشير إلى `https://your-domain/api/paypal/webhook` مع أحداث
+   `BILLING.SUBSCRIPTION.ACTIVATED` و`CANCELLED` و`SUSPENDED` و`EXPIRED`، وضع معرّفه في `PAYPAL_WEBHOOK_ID`.
+
+تظهر في نافذة الترقية البوابة المُعدّة فقط (أو كلتاهما).
+
 المسارات:
 
 | المسار | الوظيفة |
 |---|---|
 | `POST /api/checkout/session` | ينشئ جلسة Stripe Checkout ويعيد رابطها |
-| `GET /checkout?session_id=...` | صفحة العودة بعد الدفع: تتحقق من الجلسة وتفعّل الخطة المدفوعة |
-| `POST /api/stripe/webhook` | يفعّل الخطة أو يلغيها حسب أحداث Stripe (المصدر الموثوق) |
+| `POST /api/paypal/subscription` | ينشئ اشتراك PayPal مربوطًا بالزائر ويعيد معرّفه لأزرار PayPal |
+| `GET /checkout?session_id=...` | صفحة نجاح Stripe: تتحقق من الجلسة وتفعّل الخطة المدفوعة |
+| `GET /checkout?provider=paypal&subscription_id=...` | صفحة نجاح PayPal: تتحقق من الاشتراك وتفعّل الخطة المدفوعة |
+| `POST /api/stripe/webhook` | يفعّل الخطة أو يلغيها حسب أحداث Stripe |
+| `POST /api/paypal/webhook` | يفعّل الخطة أو يلغيها حسب أحداث PayPal (بعد التحقق من التوقيع) |
 | `GET /api/me` | خطة الزائر وعدد محاولاته المتبقية |
 
 ## الرفع على Render
@@ -150,9 +166,14 @@ for seg in result.segments:   # المقاطع مع التوقيت
 
 1. ارفع المستودع إلى GitHub.
 2. في [لوحة Render](https://dashboard.render.com) اختر **New > Blueprint** واربط المستودع.
-3. سيطلب Render القيم السرية: `ANTHROPIC_API_KEY` ومفاتيح Stripe، و`PUBLIC_BASE_URL` (اختياري؛ إن تُرك
+3. سيطلب Render القيم السرية: `ANTHROPIC_API_KEY` ومفاتيح Stripe و`PAYPAL_CLIENT_SECRET` و`PAYPAL_PLAN_ID`
+   و`PAYPAL_WEBHOOK_ID`، و`PUBLIC_BASE_URL` (اختياري؛ إن تُرك
    فارغًا يُستخدم رابط `onrender.com` تلقائيًا في العلامة المائية وروابط الدفع).
-4. بعد أول رفع، أضف Webhook في Stripe يشير إلى `https://<رابطك>/api/stripe/webhook`.
+4. بعد أول رفع، أضف Webhook في Stripe يشير إلى `https://<رابطك>/api/stripe/webhook`، وآخر في PayPal
+   يشير إلى `https://<رابطك>/api/paypal/webhook`.
+
+أمر التشغيل موجود في `render.yaml` (`startCommand`) وفي `Procfile` بالصيغة نفسها. Render يعتمد على
+`render.yaml` أو إعدادات اللوحة، أما `Procfile` فتقرؤه منصات مثل Heroku وRailway.
 
 ملاحظات:
 - الخدمة على خطة `starter` لأن قاعدة البيانات (الحصص والاشتراكات) تُحفظ على قرص دائم في `/var/data`،

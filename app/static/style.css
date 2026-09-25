@@ -353,6 +353,14 @@ button, input, output { font: inherit; color: inherit; }
 .modal-price { display: flex; flex-direction: column; margin-bottom: 14px; }
 .modal-price span { font-size: 24px; font-weight: 700; }
 .modal-price small { color: var(--muted); font-size: 13px; }
+.pay-options { display: flex; flex-direction: column; gap: 12px; }
+.pay-divider {
+  display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px;
+}
+.pay-divider::before, .pay-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.paypal-buttons { min-height: 0; }
+.paypal-buttons:not(:empty) { min-height: 45px; }
+.paypal-loading { margin: 0; color: var(--muted); font-size: 13px; }
 .modal-error { margin: 10px 0 0; color: var(--danger); font-size: 14px; }
 .modal-secure { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; }
 

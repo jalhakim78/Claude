@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import db
 from app.billing import router as billing_router
+from app.paypal import router as paypal_router
 from app.config import settings
 from app.schemas import MAX_POSTS, SummarizeRequest, SummarizeResponse, TranscriptResponse
 from app.services.summarizer import (
@@ -40,6 +41,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="YouTube Summarizer → X Posts", lifespan=lifespan)
 app.add_middleware(VisitorMiddleware)
 app.include_router(billing_router)
+app.include_router(paypal_router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
@@ -54,6 +56,12 @@ def _account(request: Request) -> dict:
         "usage": usage.to_dict(),
         "stripe_enabled": settings.stripe_enabled,
         "price_label": settings.pro_price_label,
+        # معرّف العميل (Client ID) عام بطبيعته ويُستخدم في المتصفح؛ السرّ يبقى في الخادم فقط
+        "paypal": {
+            "enabled": settings.paypal_enabled,
+            "client_id": settings.paypal_client_id if settings.paypal_enabled else None,
+            "currency": settings.paypal_currency,
+        },
     }
 
 

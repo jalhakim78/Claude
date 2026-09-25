@@ -1,4 +1,4 @@
-"""الربط مع Stripe: إنشاء جلسة الدفع، صفحة العودة /checkout، والـ Webhook.
+"""الربط مع Stripe، وصفحة نجاح الدفع /checkout المشتركة بين Stripe وPayPal.
 
 التدفق:
 1. الواجهة تستدعي POST /api/checkout/session فتحصل على رابط Stripe Checkout.
@@ -17,7 +17,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app import db
+from app import db, paypal
 from app.config import settings
 from app.visitors import visitor_id
 
@@ -87,31 +87,67 @@ async def create_checkout_session(request: Request):
     return {"url": session.url}
 
 
-@router.get("/checkout", response_class=HTMLResponse)
-async def checkout_return(request: Request, session_id: str | None = None):
-    """الصفحة التي يعود إليها المستخدم من Stripe بعد الدفع."""
-    status, message = "error", "لم نتمكن من التحقق من عملية الدفع."
+INVALID_LINK = "رابط غير صالح. إن كنت قد دفعت بالفعل فسيتم تفعيل حسابك تلقائيًا خلال دقائق."
+SUCCESS = "تم تفعيل اشتراكك بنجاح! استمتع بتلخيص غير محدود."
+PENDING = "لم تكتمل عملية الدفع بعد."
 
+
+async def _stripe_result(session_id: str | None) -> tuple[str, str, str | None]:
     if not session_id or not session_id.startswith("cs_"):
-        message = "رابط غير صالح. إن كنت قد دفعت بالفعل فسيتم تفعيل حسابك تلقائيًا خلال دقائق."
-    else:
-        try:
-            session = await run_in_threadpool(_client().v1.checkout.sessions.retrieve, session_id)
-        except HTTPException:
-            raise
-        except stripe.StripeError:
-            log.exception("Stripe session retrieval failed")
-            session = None
+        return "error", INVALID_LINK, None
+    try:
+        session = await run_in_threadpool(_client().v1.checkout.sessions.retrieve, session_id)
+    except stripe.StripeError:
+        log.exception("Stripe session retrieval failed")
+        return "error", "لم نتمكن من التحقق من عملية الدفع.", None
 
-        if session is not None and _is_paid(session):
-            paid_vid = _activate_from_session(session)
-            if paid_vid:
-                # إن أكمل الدفع من متصفح مختلف، نربط هذا المتصفح بالحساب المدفوع
-                if paid_vid != visitor_id(request):
-                    request.state.set_visitor_id = paid_vid
-                status, message = "success", "تم تفعيل اشتراكك بنجاح! استمتع بتلخيص غير محدود."
-        elif session is not None and _get(session, "status") == "open":
-            status, message = "pending", "لم تكتمل عملية الدفع بعد."
+    if _is_paid(session):
+        paid_vid = _activate_from_session(session)
+        if paid_vid:
+            return "success", SUCCESS, paid_vid
+    elif _get(session, "status") == "open":
+        return "pending", PENDING, None
+    return "error", "لم نتمكن من التحقق من عملية الدفع.", None
+
+
+async def _paypal_result(subscription_id: str | None) -> tuple[str, str, str | None]:
+    paypal._require_enabled()
+    if not subscription_id or not paypal.SUBSCRIPTION_ID_RE.match(subscription_id):
+        return "error", INVALID_LINK, None
+    try:
+        sub = await run_in_threadpool(paypal.get_subscription, subscription_id)
+    except paypal.PayPalError:
+        return "error", "لم نتمكن من التحقق من الاشتراك لدى PayPal.", None
+
+    if paypal.is_active_for_our_plan(sub):
+        paid_vid = paypal.activate_from_subscription(sub)
+        if paid_vid:
+            return "success", SUCCESS, paid_vid
+    elif sub.get("status") in ("APPROVAL_PENDING", "APPROVED"):
+        return "pending", "تمت الموافقة على الاشتراك وجارٍ تفعيله لدى PayPal؛ حدّث الصفحة بعد دقيقة.", None
+    return "error", "الاشتراك غير نشط لدى PayPal.", None
+
+
+@router.get("/checkout", response_class=HTMLResponse)
+async def checkout_return(
+    request: Request,
+    provider: str = "stripe",
+    session_id: str | None = None,
+    subscription_id: str | None = None,
+):
+    """صفحة نجاح الدفع لكلتا البوابتين: تتحقق من الدفع لدى البوابة ثم تفعّل الخطة المدفوعة.
+
+    Stripe: /checkout?session_id=cs_...
+    PayPal: /checkout?provider=paypal&subscription_id=I-...
+    """
+    if provider == "paypal":
+        status, message, paid_vid = await _paypal_result(subscription_id)
+    else:
+        status, message, paid_vid = await _stripe_result(session_id)
+
+    # إن أكمل الدفع من متصفح مختلف، نربط هذا المتصفح بالحساب المدفوع
+    if paid_vid and paid_vid != visitor_id(request):
+        request.state.set_visitor_id = paid_vid
 
     return templates.TemplateResponse(
         request,
