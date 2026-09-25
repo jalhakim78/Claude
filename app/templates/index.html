@@ -3,41 +3,94 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>ملخّص يوتيوب ← منشورات X</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
-  <main class="container">
-    <h1>ملخّص فيديوهات يوتيوب</h1>
-    <p class="subtitle">الصق رابط الفيديو لتحصل على ملخص ومنشورات جاهزة لـ X</p>
+  <main class="page">
+    <header class="hero">
+      <span class="badge">YouTube → X</span>
+      <h1>حوّل أي فيديو إلى منشورات جاهزة</h1>
+      <p>الصق رابط فيديو يوتيوب، ونلخّصه لك ونكتب منشورات قصيرة جاهزة للنشر على X.</p>
+    </header>
 
-    <form id="summarize-form">
-      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=..." required>
-      <div class="row">
-        <label>اللغة
-          <select id="language">
-            <option value="ar">العربية</option>
-            <option value="en">English</option>
-          </select>
-        </label>
-        <label>عدد المنشورات
-          <input type="number" id="num-posts" min="1" max="{{ max_posts }}" value="3">
-        </label>
-        <button type="submit" id="submit-btn">لخّص</button>
+    <form id="summarize-form" class="card composer" novalidate>
+      <label for="url" class="sr-only">رابط الفيديو</label>
+      <div class="url-field">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>
+        <input type="url" id="url" dir="ltr" inputmode="url" autocomplete="off"
+               placeholder="https://www.youtube.com/watch?v=..." required>
+        <button type="button" id="paste-btn" class="ghost-btn">لصق</button>
+      </div>
+
+      <div class="controls">
+        <div class="options">
+          <div class="segmented" role="radiogroup" aria-label="لغة المنشورات">
+            <input type="radio" name="language" id="lang-ar" value="ar" checked>
+            <label for="lang-ar">العربية</label>
+            <input type="radio" name="language" id="lang-en" value="en">
+            <label for="lang-en">English</label>
+          </div>
+
+          <div class="stepper" aria-label="عدد المنشورات">
+            <button type="button" data-step="-1" aria-label="إنقاص">−</button>
+            <output id="num-posts" data-max="{{ max_posts }}">3</output>
+            <span>منشورات</span>
+            <button type="button" data-step="1" aria-label="زيادة">+</button>
+          </div>
+        </div>
+
+        <button type="submit" id="submit-btn" class="primary-btn">
+          <span class="btn-label">لخّص الفيديو</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
       </div>
     </form>
 
-    <p id="status" class="status" hidden></p>
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
-    <section id="result" hidden>
-      <h2 id="title"></h2>
-      <p id="summary"></p>
-      <h3>أهم النقاط</h3>
-      <ul id="key-points"></ul>
-      <h3>منشورات X</h3>
-      <div id="posts"></div>
+    <section id="result" class="result" hidden>
+      <article class="card video">
+        <img id="thumb" alt="" loading="lazy">
+        <div>
+          <h2 id="title"></h2>
+          <p id="summary"></p>
+          <details>
+            <summary>أهم النقاط</summary>
+            <ul id="key-points"></ul>
+          </details>
+        </div>
+      </article>
+
+      <div class="card posts-box">
+        <div class="posts-head">
+          <h3>المنشورات الجاهزة</h3>
+          <button type="button" id="copy-all" class="ghost-btn">نسخ الكل</button>
+        </div>
+        <div id="posts" class="posts"></div>
+      </div>
     </section>
+
+    <footer class="foot">يعمل بواسطة Claude</footer>
   </main>
+
+  <template id="post-template">
+    <article class="post">
+      <p class="post-text" contenteditable="true" spellcheck="false"></p>
+      <footer>
+        <span class="count"></span>
+        <div class="post-actions">
+          <button type="button" class="ghost-btn copy">نسخ</button>
+          <a class="ghost-btn share" target="_blank" rel="noopener">نشر على X</a>
+        </div>
+      </footer>
+    </article>
+  </template>
+
   <script src="{{ url_for('static', path='app.js') }}"></script>
 </body>
 </html>
