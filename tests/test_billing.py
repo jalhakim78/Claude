@@ -76,16 +76,19 @@ def test_checkout_success_activates_pro(stripe_on, monkeypatch):
     assert db.get_usage(vid).is_pro
 
 
-def test_checkout_from_other_browser_links_cookie(stripe_on, monkeypatch):
+def test_checkout_link_in_other_browser_does_not_grant_account(stripe_on, monkeypatch):
     payer = TestClient(main.app)
     payer.get("/")
     paid_vid = payer.cookies[COOKIE_NAME]
     _fake_client(monkeypatch, FakeSessions(_session(client_reference_id=paid_vid)))
 
     other = TestClient(main.app)
+    other.get("/")
     r = other.get("/checkout", params={"session_id": "cs_1"})
-    assert r.status_code == 200
-    assert other.cookies[COOKIE_NAME] == paid_vid
+    assert r.status_code == 200 and "سجّل الدخول" in r.text
+    assert db.get_usage(paid_vid).is_pro
+    assert other.cookies[COOKIE_NAME] != paid_vid
+    assert other.get("/api/me").json()["usage"]["plan"] == "free"
 
 
 @pytest.mark.parametrize(

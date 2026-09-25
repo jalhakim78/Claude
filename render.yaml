@@ -40,6 +40,15 @@ services:
         value: BAATp6udqGzOBRb4TjoQvXdvAkNW590g0NqM99gPN8tYsjB1UY8kibhpo_xRs9lNw7tDSpkPAOv5Zg7rhY
       - key: PAYPAL_CURRENCY
         value: USD
+      # تسجيل الدخول بالبريد
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURITY
+        value: starttls
+      - key: REQUIRE_LOGIN
+        value: "false"
+      - key: SESSION_DAYS
+        value: "30"
       # القيم السرية: يطلبها Render عند إنشاء الخدمة ولا تُحفظ في المستودع
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -54,6 +63,14 @@ services:
       - key: PAYPAL_PLAN_ID
         sync: false
       - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
         sync: false
       # اختياري: نطاقك الخاص (مثل https://yt2x.com). إن تُرك فارغًا يُستخدم رابط onrender.com تلقائيًا
       - key: PUBLIC_BASE_URL

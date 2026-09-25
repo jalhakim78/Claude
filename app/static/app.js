@@ -123,6 +123,12 @@ function renderAccount() {
         : `متبقٍّ لك ${remaining} من ${limit} محاولات تلخيص مجانية`;
   }
 
+  const user = account.user;
+  $("login-btn").hidden = !account.login_enabled || Boolean(user);
+  $("account-menu").hidden = !user;
+  $("account-email").textContent = user?.email ?? "";
+  $("account-email").title = user?.email ?? "";
+
   const label = submitBtn.querySelector(".btn-label");
   submitBtn.classList.toggle("locked", isLocked());
   label.textContent = isLocked() ? "🔒 اشترك لمتابعة التلخيص" : "لخّص الفيديو";
@@ -139,12 +145,17 @@ function openUpgradeModal() {
   $("modal-price").textContent = account.price_label;
   $("upgrade-error").hidden = true;
 
-  const stripeOn = account.stripe_enabled;
-  const paypalOn = account.paypal?.enabled;
+  // الدفع يتطلب تسجيل الدخول ليرتبط الاشتراك بالبريد (عند تفعيل الدخول)
+  const needsLogin = account.login_enabled && !account.user;
+  $("login-first").hidden = !needsLogin;
+  $("pay-options").hidden = needsLogin;
+
+  const stripeOn = account.stripe_enabled && !needsLogin;
+  const paypalOn = account.paypal?.enabled && !needsLogin;
   $("stripe-option").hidden = !stripeOn;
   $("paypal-option").hidden = !paypalOn;
   $("pay-divider").hidden = !(stripeOn && paypalOn);
-  $("no-payment").hidden = stripeOn || paypalOn;
+  $("no-payment").hidden = needsLogin || stripeOn || paypalOn;
 
   if (!modal.open) modal.showModal();
   if (paypalOn) renderPayPalButtons();
@@ -239,13 +250,166 @@ $("upgrade-btn").addEventListener("click", async () => {
   try {
     const response = await fetch("/api/checkout/session", { method: "POST" });
     const data = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      resetBtn();
+      openLoginModal(openUpgradeModal);
+      return;
+    }
     if (!response.ok || !data.url) throw new Error(data.detail || "تعذّر بدء عملية الدفع");
     window.location.href = data.url; // الانتقال إلى صفحة الدفع في Stripe
   } catch (err) {
     showUpgradeError(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message);
+    resetBtn();
+  }
+
+  function resetBtn() {
     btn.disabled = false;
     btn.classList.remove("loading");
   }
+});
+
+// ---------- تسجيل الدخول بالبريد ----------
+
+const loginModal = $("login-modal");
+const emailStep = $("login-email-step");
+const codeStep = $("login-code-step");
+let afterLogin = null;
+let resendTimer = null;
+
+async function postJSON(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail : null;
+    throw Object.assign(new Error(detail || `حدث خطأ غير متوقع (${response.status})`), {
+      status: response.status,
+    });
+  }
+  return data;
+}
+
+async function refreshAccount() {
+  const response = await fetch("/api/me");
+  if (response.ok) account = await response.json();
+  renderAccount();
+}
+
+function showLoginError(message) {
+  const el = $("login-error");
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function setBusy(form, busy) {
+  const btn = form.querySelector(".primary-btn");
+  btn.disabled = busy;
+  btn.classList.toggle("loading", busy);
+}
+
+function showStep(step) {
+  emailStep.hidden = step !== "email";
+  codeStep.hidden = step !== "code";
+  showLoginError("");
+  (step === "email" ? $("login-email") : $("login-code")).focus();
+}
+
+function openLoginModal(then = null) {
+  afterLogin = then;
+  if (modal.open) modal.close();
+  showStep("email");
+  if (!loginModal.open) loginModal.showModal();
+  $("login-email").focus();
+}
+
+function startResendCooldown(seconds = 60) {
+  const btn = $("login-resend");
+  clearInterval(resendTimer);
+  let left = seconds;
+  btn.disabled = true;
+  const tick = () => {
+    btn.textContent = left > 0 ? `إعادة الإرسال بعد ${left} ث` : "إعادة إرسال الرمز";
+    btn.disabled = left > 0;
+    if (left-- <= 0) clearInterval(resendTimer);
+  };
+  tick();
+  resendTimer = setInterval(tick, 1000);
+}
+
+async function requestCode() {
+  const email = $("login-email").value.trim();
+  await postJSON("/api/auth/request-code", { email });
+  $("login-sent-to").textContent = email;
+  $("login-code").value = "";
+  showStep("code");
+  startResendCooldown();
+}
+
+emailStep.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setBusy(emailStep, true);
+  try {
+    await requestCode();
+  } catch (err) {
+    showLoginError(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message);
+  } finally {
+    setBusy(emailStep, false);
+  }
+});
+
+codeStep.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setBusy(codeStep, true);
+  try {
+    await postJSON("/api/auth/verify", {
+      email: $("login-email").value.trim(),
+      code: $("login-code").value,
+    });
+    await refreshAccount();
+    loginModal.close();
+    showToast("تم تسجيل الدخول");
+    const next = afterLogin;
+    afterLogin = null;
+    if (next) next();
+  } catch (err) {
+    showLoginError(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message);
+    $("login-code").select();
+  } finally {
+    setBusy(codeStep, false);
+  }
+});
+
+// إرسال تلقائي عند إدخال 6 أرقام (ومنها اللصق)
+$("login-code").addEventListener("input", (e) => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
+  if (e.target.value.length === 6) codeStep.requestSubmit();
+});
+
+$("login-resend").addEventListener("click", async () => {
+  try {
+    await requestCode();
+    showToast("أرسلنا رمزًا جديدًا");
+  } catch (err) {
+    showLoginError(err.message);
+  }
+});
+$("login-change").addEventListener("click", () => showStep("email"));
+loginModal.addEventListener("click", (e) => {
+  if (e.target === loginModal) loginModal.close();
+});
+
+$("login-btn").addEventListener("click", () => openLoginModal());
+$("login-first-btn").addEventListener("click", () => openLoginModal(openUpgradeModal));
+
+$("logout-btn").addEventListener("click", async () => {
+  try {
+    await postJSON("/api/auth/logout");
+  } catch {}
+  await refreshAccount();
+  showToast("تم تسجيل الخروج");
 });
 
 // ---------- عدد المنشورات ----------
@@ -451,6 +615,10 @@ $("copy-all").addEventListener("click", (e) => {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  if (account.require_login && !account.user) {
+    openLoginModal();
+    return;
+  }
   if (isLocked()) {
     openUpgradeModal();
     return;
@@ -496,6 +664,9 @@ form.addEventListener("submit", async (event) => {
     });
 
     const data = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      throw Object.assign(new Error(data.detail), { login: true });
+    }
     if (response.status === 402) {
       account.usage.remaining = 0;
       throw Object.assign(new Error(data.detail), { quota: true });
@@ -509,7 +680,10 @@ form.addEventListener("submit", async (event) => {
     setLoading(false);
     renderResult(data);
   } catch (err) {
-    if (err.quota) {
+    if (err.login) {
+      await refreshAccount();
+      openLoginModal();
+    } else if (err.quota) {
       openUpgradeModal();
     } else {
       showStatus(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message, true);

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import db
+from app.auth import router as auth_router
 from app.billing import router as billing_router
 from app.paypal import router as paypal_router
 from app.config import settings
@@ -27,7 +28,7 @@ from app.services.youtube import (
     get_transcript,
 )
 from app.tones import DEFAULT_TONE, TONES
-from app.visitors import VisitorMiddleware, visitor_id
+from app.visitors import VisitorMiddleware, current_email, visitor_id
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -40,6 +41,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="YouTube Summarizer → X Posts", lifespan=lifespan)
 app.add_middleware(VisitorMiddleware)
+app.include_router(auth_router)
 app.include_router(billing_router)
 app.include_router(paypal_router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -54,6 +56,9 @@ def _account(request: Request) -> dict:
     usage = db.get_usage(visitor_id(request))
     return {
         "usage": usage.to_dict(),
+        "user": {"email": current_email(request)} if current_email(request) else None,
+        "login_enabled": settings.login_enabled,
+        "require_login": settings.require_login and settings.login_enabled,
         "stripe_enabled": settings.stripe_enabled,
         "price_label": settings.pro_price_label,
         # معرّف العميل (Client ID) عام بطبيعته ويُستخدم في المتصفح؛ السرّ يبقى في الخادم فقط
@@ -116,6 +121,9 @@ async def summarize_video(payload: SummarizeRequest, request: Request):
         raise HTTPException(
             status_code=422, detail=f"الحد الأقصى لعدد المنشورات هو {_max_posts()}"
         )
+
+    if settings.require_login and settings.login_enabled and not current_email(request):
+        raise HTTPException(status_code=401, detail="سجّل الدخول ببريدك الإلكتروني لبدء التلخيص")
 
     vid = visitor_id(request)
     # نحجز المحاولة قبل البدء (ذريًّا) ونعيدها إن فشل التلخيص

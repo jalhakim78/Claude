@@ -16,3 +16,7 @@ def isolated_settings(tmp_path, monkeypatch):
     for name in ("paypal_client_id", "paypal_client_secret", "paypal_plan_id", "paypal_webhook_id"):
         monkeypatch.setattr(settings, name, None)
     monkeypatch.setattr(settings, "paypal_env", "sandbox")
+    for name in ("smtp_host", "smtp_user", "smtp_password", "email_from"):
+        monkeypatch.setattr(settings, name, None)
+    monkeypatch.setattr(settings, "dev_email_log", False)
+    monkeypatch.setattr(settings, "require_login", False)

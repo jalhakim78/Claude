@@ -117,12 +117,13 @@ def test_checkout_paypal_success_activates(fake_paypal):
     assert db.get_usage(vid).is_pro
 
 
-def test_checkout_paypal_links_other_browser(fake_paypal):
+def test_checkout_paypal_link_in_other_browser_does_not_grant_account(fake_paypal):
     _, payer_vid = _client()
     fake_paypal["subscription"] = _sub(custom_id=payer_vid)
-    other = TestClient(main.app)
-    other.get("/checkout", params={"provider": "paypal", "subscription_id": SUB_ID})
-    assert other.cookies[COOKIE_NAME] == payer_vid
+    other, _ = _client()
+    r = other.get("/checkout", params={"provider": "paypal", "subscription_id": SUB_ID})
+    assert "سجّل الدخول" in r.text and db.get_usage(payer_vid).is_pro
+    assert other.get("/api/me").json()["usage"]["plan"] == "free"
 
 
 @pytest.mark.parametrize(

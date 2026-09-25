@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import db, paypal
 from app.config import settings
-from app.visitors import visitor_id
+from app.visitors import current_email, require_login_for_payment, visitor_id
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -66,21 +66,23 @@ def _activate_from_session(session) -> str | None:
 @router.post("/api/checkout/session")
 async def create_checkout_session(request: Request):
     client = _client()
+    require_login_for_payment(request)
     vid = visitor_id(request)
+    email = current_email(request)
+    params = {
+        "mode": "subscription",
+        "line_items": [{"price": settings.stripe_price_id, "quantity": 1}],
+        # نربط الدفع بالزائر لنعرف من نفعّل له الخطة بعد الدفع
+        "client_reference_id": vid,
+        "subscription_data": {"metadata": {"visitor_id": vid}},
+        "success_url": f"{settings.public_base_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{settings.public_base_url}/?checkout=cancelled",
+        "allow_promotion_codes": True,
+    }
+    if email:
+        params["customer_email"] = email
     try:
-        session = await run_in_threadpool(
-            client.v1.checkout.sessions.create,
-            {
-                "mode": "subscription",
-                "line_items": [{"price": settings.stripe_price_id, "quantity": 1}],
-                # نربط الدفع بالزائر لنعرف من نفعّل له الخطة بعد الدفع
-                "client_reference_id": vid,
-                "subscription_data": {"metadata": {"visitor_id": vid}},
-                "success_url": f"{settings.public_base_url}/checkout?session_id={{CHECKOUT_SESSION_ID}}",
-                "cancel_url": f"{settings.public_base_url}/?checkout=cancelled",
-                "allow_promotion_codes": True,
-            },
-        )
+        session = await run_in_threadpool(client.v1.checkout.sessions.create, params)
     except stripe.StripeError as exc:
         log.exception("Stripe checkout session creation failed")
         raise HTTPException(status_code=502, detail="تعذّر بدء عملية الدفع، حاول لاحقًا") from exc
@@ -145,9 +147,9 @@ async def checkout_return(
     else:
         status, message, paid_vid = await _stripe_result(session_id)
 
-    # إن أكمل الدفع من متصفح مختلف، نربط هذا المتصفح بالحساب المدفوع
-    if paid_vid and paid_vid != visitor_id(request):
-        request.state.set_visitor_id = paid_vid
+    # إن أكمل الدفع من متصفح آخر فلا نفتح الحساب هنا: يكفي تسجيل الدخول بالبريد نفسه
+    if status == "success" and paid_vid != visitor_id(request):
+        message += " سجّل الدخول ببريدك الإلكتروني على هذا الجهاز للاستفادة منه."
 
     return templates.TemplateResponse(
         request,

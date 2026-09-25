@@ -45,6 +45,28 @@ class Settings:
     paypal_env: str = os.getenv("PAYPAL_ENV", "live").lower()
     paypal_currency: str = os.getenv("PAYPAL_CURRENCY", "USD").upper()
 
+    # تسجيل الدخول بالبريد الإلكتروني (رمز من 6 أرقام يُرسل عبر SMTP)
+    smtp_host: str | None = os.getenv("SMTP_HOST") or None
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str | None = os.getenv("SMTP_USER") or None
+    smtp_password: str | None = os.getenv("SMTP_PASSWORD") or None
+    # "starttls" (المنفذ 587) أو "ssl" (المنفذ 465)
+    smtp_security: str = os.getenv("SMTP_SECURITY", "starttls").lower()
+    email_from: str | None = os.getenv("EMAIL_FROM") or None
+    # للتطوير فقط: يطبع رمز الدخول في سجل الخادم بدل إرساله بالبريد
+    dev_email_log: bool = os.getenv("DEV_EMAIL_LOG", "").lower() in ("1", "true", "yes")
+    # إن فُعّل، لا يستطيع الزائر استخدام المحاولات المجانية دون تسجيل الدخول
+    require_login: bool = os.getenv("REQUIRE_LOGIN", "").lower() in ("1", "true", "yes")
+    session_days: int = int(os.getenv("SESSION_DAYS", "30"))
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.email_from)
+
+    @property
+    def login_enabled(self) -> bool:
+        return self.email_enabled or self.dev_email_log
+
     @property
     def stripe_enabled(self) -> bool:
         return bool(self.stripe_secret_key and self.stripe_price_id)

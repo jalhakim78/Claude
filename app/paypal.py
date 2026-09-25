@@ -20,7 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app import db
 from app.config import settings
-from app.visitors import visitor_id
+from app.visitors import current_email, require_login_for_payment, visitor_id
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,24 +87,22 @@ def _api(method: str, path: str, **kwargs) -> dict:
     return r.json() if r.content else {}
 
 
-def create_subscription(vid: str) -> str:
-    body = _api(
-        "POST",
-        "/v1/billing/subscriptions",
-        json={
-            "plan_id": settings.paypal_plan_id,
-            # نربط الاشتراك بالزائر لنعرف من نفعّل له الخطة بعد الدفع
-            "custom_id": vid,
-            "application_context": {
-                "brand_name": settings.site_name,
-                "shipping_preference": "NO_SHIPPING",
-                "user_action": "SUBSCRIBE_NOW",
-                "return_url": f"{settings.public_base_url}/checkout?provider=paypal",
-                "cancel_url": f"{settings.public_base_url}/?checkout=cancelled",
-            },
+def create_subscription(vid: str, email: str | None = None) -> str:
+    payload = {
+        "plan_id": settings.paypal_plan_id,
+        # نربط الاشتراك بالزائر لنعرف من نفعّل له الخطة بعد الدفع
+        "custom_id": vid,
+        "application_context": {
+            "brand_name": settings.site_name,
+            "shipping_preference": "NO_SHIPPING",
+            "user_action": "SUBSCRIBE_NOW",
+            "return_url": f"{settings.public_base_url}/checkout?provider=paypal",
+            "cancel_url": f"{settings.public_base_url}/?checkout=cancelled",
         },
-    )
-    return body["id"]
+    }
+    if email:
+        payload["subscriber"] = {"email_address": email}
+    return _api("POST", "/v1/billing/subscriptions", json=payload)["id"]
 
 
 def get_subscription(subscription_id: str) -> dict:
@@ -150,8 +148,9 @@ def verify_webhook(headers, event: dict) -> bool:
 @router.post("/api/paypal/subscription")
 async def paypal_create_subscription(request: Request):
     _require_enabled()
+    require_login_for_payment(request)
     try:
-        sub_id = await run_in_threadpool(create_subscription, visitor_id(request))
+        sub_id = await run_in_threadpool(create_subscription, visitor_id(request), current_email(request))
     except PayPalError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"id": sub_id}
