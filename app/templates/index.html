@@ -51,7 +51,22 @@
       </div>
     </form>
 
-    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+    <div id="status" class="status" role="alert" hidden></div>
+
+    <section id="loader" class="card loader" role="status" aria-live="polite" hidden>
+      <div class="loader-head">
+        <span class="big-spinner" aria-hidden="true"></span>
+        <div>
+          <p id="loader-title" class="loader-title">جارٍ جلب نص الفيديو…</p>
+          <p class="loader-sub">قد يستغرق ذلك حتى دقيقة حسب طول الفيديو</p>
+        </div>
+      </div>
+      <div class="skeletons" aria-hidden="true">
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+      </div>
+    </section>
 
     <section id="result" class="result" hidden>
       <article class="card video">
@@ -69,7 +84,7 @@
       <div class="card posts-box">
         <div class="posts-head">
           <h3>المنشورات الجاهزة</h3>
-          <button type="button" id="copy-all" class="ghost-btn">نسخ الكل</button>
+          <button type="button" id="copy-all" class="ghost-btn"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ الكل</span></button>
         </div>
         <div id="posts" class="posts"></div>
       </div>
@@ -84,12 +99,14 @@
       <footer>
         <span class="count"></span>
         <div class="post-actions">
-          <button type="button" class="ghost-btn copy">نسخ</button>
+          <button type="button" class="copy-btn copy"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ</span></button>
           <a class="ghost-btn share" target="_blank" rel="noopener">نشر على X</a>
         </div>
       </footer>
     </article>
   </template>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="{{ url_for('static', path='app.js') }}"></script>
 </body>

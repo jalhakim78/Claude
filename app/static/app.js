@@ -6,6 +6,9 @@ const form = $("summarize-form");
 const urlInput = $("url");
 const submitBtn = $("submit-btn");
 const statusEl = $("status");
+const loaderEl = $("loader");
+const loaderTitle = $("loader-title");
+const toastEl = $("toast");
 const resultEl = $("result");
 const numPostsEl = $("num-posts");
 const postTemplate = $("post-template");
@@ -21,21 +24,54 @@ function showStatus(message, isError = false) {
 function setLoading(loading) {
   submitBtn.disabled = loading;
   submitBtn.classList.toggle("loading", loading);
+  loaderEl.hidden = !loading;
 }
 
-async function copyText(text, button) {
+let toastTimer;
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), 1800);
+}
+
+// navigator.clipboard يعمل فقط على https أو localhost؛
+// عند فتح الصفحة من عنوان شبكة محلية نستخدم الطريقة القديمة كبديل.
+function legacyCopy(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.append(area);
+  area.select();
+  const ok = document.execCommand("copy");
+  area.remove();
+  if (!ok) throw new Error("copy failed");
+}
+
+async function copyText(text, button, toastMessage = "تم نسخ المنشور إلى الحافظة") {
   try {
-    await navigator.clipboard.writeText(text);
-    const original = button.textContent;
-    button.textContent = "تم النسخ ✓";
-    button.classList.add("done");
-    setTimeout(() => {
-      button.textContent = original;
-      button.classList.remove("done");
-    }, 1500);
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      legacyCopy(text);
+    }
   } catch {
     showStatus("تعذّر النسخ، انسخ النص يدويًا", true);
+    return;
   }
+
+  const label = button.querySelector("span") || button;
+  const original = button.dataset.label ?? label.textContent;
+  button.dataset.label = original;
+  label.textContent = "تم النسخ ✓";
+  button.classList.add("done");
+  showToast(toastMessage);
+  clearTimeout(button._resetTimer);
+  button._resetTimer = setTimeout(() => {
+    label.textContent = original;
+    button.classList.remove("done");
+  }, 1500);
 }
 
 // X تحسب الأحرف بنقاط Unicode، لذا نستخدم [...text] بدل text.length
@@ -128,7 +164,7 @@ $("copy-all").addEventListener("click", (e) => {
   const all = [...document.querySelectorAll("#posts .post-text")]
     .map((el) => el.innerText.trim())
     .join("\n\n---\n\n");
-  copyText(all, e.currentTarget);
+  copyText(all, e.currentTarget, "تم نسخ كل المنشورات");
 });
 
 // ---------- Submit ----------
@@ -145,11 +181,12 @@ form.addEventListener("submit", async (event) => {
   }
 
   resultEl.hidden = true;
+  statusEl.hidden = true;
+  loaderTitle.textContent = "جارٍ جلب نص الفيديو…";
   setLoading(true);
-  showStatus("جارٍ جلب نص الفيديو…");
   // لا يرسل الخادم مراحل التقدّم، لذا نغيّر الرسالة بعد ثوانٍ لإظهار أن العمل مستمر
   const stageTimer = setTimeout(
-    () => showStatus("جارٍ التلخيص وكتابة المنشورات… قد يستغرق ذلك دقيقة."),
+    () => (loaderTitle.textContent = "جارٍ التلخيص وكتابة المنشورات…"),
     3000
   );
 
@@ -170,7 +207,7 @@ form.addEventListener("submit", async (event) => {
       throw new Error(detail || `حدث خطأ غير متوقع (${response.status})`);
     }
 
-    statusEl.hidden = true;
+    setLoading(false);
     renderResult(data);
   } catch (err) {
     const message = err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message;
