@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ملخّص يوتيوب ← منشورات X</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <h1>ملخّص فيديوهات يوتيوب</h1>
+    <p class="subtitle">الصق رابط الفيديو لتحصل على ملخص ومنشورات جاهزة لـ X</p>
+
+    <form id="summarize-form">
+      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=..." required>
+      <div class="row">
+        <label>اللغة
+          <select id="language">
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label>عدد المنشورات
+          <input type="number" id="num-posts" min="1" max="{{ max_posts }}" value="3">
+        </label>
+        <button type="submit" id="submit-btn">لخّص</button>
+      </div>
+    </form>
+
+    <p id="status" class="status" hidden></p>
+
+    <section id="result" hidden>
+      <h2 id="title"></h2>
+      <p id="summary"></p>
+      <h3>أهم النقاط</h3>
+      <ul id="key-points"></ul>
+      <h3>منشورات X</h3>
+      <div id="posts"></div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>
