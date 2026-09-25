@@ -22,3 +22,19 @@ class VideoSummary(BaseModel):
 
 class SummarizeResponse(VideoSummary):
     video_id: str
+
+
+class TranscriptSegmentOut(BaseModel):
+    text: str
+    start: float
+    duration: float
+
+
+class TranscriptResponse(BaseModel):
+    video_id: str
+    language: str
+    language_code: str
+    is_generated: bool
+    is_translated: bool
+    text: str
+    segments: list[TranscriptSegmentOut]

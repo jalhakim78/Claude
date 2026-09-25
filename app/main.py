@@ -2,16 +2,21 @@
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
-from app.schemas import SummarizeRequest, SummarizeResponse
+from app.schemas import SummarizeRequest, SummarizeResponse, TranscriptResponse
 from app.services.summarizer import SummarizerError, summarize
-from app.services.youtube import TranscriptError, extract_video_id, fetch_transcript
+from app.services.youtube import (
+    TranscriptError,
+    extract_video_id,
+    fetch_transcript,
+    get_transcript,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -28,6 +33,20 @@ def index(request: Request):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/transcript", response_model=TranscriptResponse)
+async def transcript(
+    url: str = Query(..., description="رابط فيديو يوتيوب أو معرّفه"),
+    lang: list[str] | None = Query(None, description="اللغات المفضّلة بالترتيب"),
+):
+    try:
+        result = await run_in_threadpool(get_transcript, url, lang)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TranscriptError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result.to_dict()
 
 
 @app.post("/api/summarize", response_model=SummarizeResponse)
