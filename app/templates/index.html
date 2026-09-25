@@ -11,7 +11,13 @@
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
+  <script id="account-data" type="application/json">{{ account | tojson }}</script>
   <main class="page">
+    <div class="topbar">
+      <span class="brand">{{ site_name }}</span>
+      <button type="button" id="plan-pill" class="plan-pill"></button>
+    </div>
+
     <header class="hero">
       <span class="badge">YouTube → X</span>
       <h1>حوّل أي فيديو إلى منشورات جاهزة</h1>
@@ -40,14 +46,14 @@
         </label>
 
         <div class="field">
-          <label class="field-label" for="num-posts">عدد المنشورات</label>
+          <label class="field-label" for="num-posts" id="num-posts-label">عدد المنشورات</label>
           <div class="number-field">
             <button type="button" data-step="-1" aria-label="إنقاص">−</button>
             <input type="number" id="num-posts" name="num_posts" inputmode="numeric"
                    min="1" max="{{ max_posts }}" step="1" value="3" required>
             <button type="button" data-step="1" aria-label="زيادة">+</button>
           </div>
-          <small class="field-hint">من 1 إلى {{ max_posts }} منشورات</small>
+          <small class="field-hint" id="num-posts-hint">من 1 إلى {{ max_posts }} منشورات</small>
         </div>
       </div>
 
@@ -66,10 +72,19 @@
         </div>
       </fieldset>
 
+      <label class="toggle-row" for="thread">
+        <span class="toggle-text">
+          <strong>🧵 توليد ثريد لـ X</strong>
+          <small>سلسلة تغريدات متصلة ومرقّمة (مثل 1/6)، كل تغريدة ضمن 280 حرفًا</small>
+        </span>
+        <input type="checkbox" id="thread" name="thread" class="switch" role="switch">
+      </label>
+
       <button type="submit" id="submit-btn" class="primary-btn">
         <span class="btn-label">لخّص الفيديو</span>
         <span class="spinner" aria-hidden="true"></span>
       </button>
+      <p id="quota-note" class="quota-note" hidden></p>
     </form>
 
     <div id="status" class="status" role="alert" hidden></div>
@@ -113,6 +128,11 @@
         <p id="posts-note" class="posts-note" hidden></p>
         <div id="posts" class="posts"></div>
       </div>
+
+      <div id="quotes-box" class="card quotes-box" hidden>
+        <h3>✨ اقتباسات ذهبية من الفيديو</h3>
+        <div id="quotes" class="quotes"></div>
+      </div>
     </section>
 
     <footer class="foot">يعمل بواسطة Claude</footer>
@@ -120,7 +140,8 @@
 
   <template id="post-template">
     <article class="post">
-      <p class="post-text" dir="auto" contenteditable="true" spellcheck="false"></p>
+      <label class="sr-only">نص المنشور</label>
+      <textarea class="post-text" dir="auto" rows="3" spellcheck="false"></textarea>
       <footer>
         <span class="count"></span>
         <div class="post-actions">
@@ -130,6 +151,38 @@
       </footer>
     </article>
   </template>
+
+  <template id="quote-template">
+    <figure class="quote">
+      <blockquote class="quote-text" dir="auto"></blockquote>
+      <figcaption class="quote-translation" dir="auto"></figcaption>
+      <button type="button" class="ghost-btn copy-quote"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ</span></button>
+    </figure>
+  </template>
+
+  <dialog id="upgrade-modal" class="modal" aria-labelledby="upgrade-title">
+    <form method="dialog" class="modal-close-form">
+      <button class="modal-close" aria-label="إغلاق">×</button>
+    </form>
+    <div class="modal-badge">⭐ الباقة الاحترافية</div>
+    <h2 id="upgrade-title">انتهت محاولاتك المجانية</h2>
+    <p class="modal-lead">
+      استخدمت محاولات التلخيص المجانية الـ <span id="modal-limit"></span>.
+      اشترك الآن واستمر في تحويل الفيديوهات إلى محتوى جاهز بلا توقف.
+    </p>
+    <ul class="plan-features">
+      <li>تلخيص غير محدود للفيديوهات</li>
+      <li>منشورات وثريدات خالية من العلامة المائية</li>
+      <li>كل الأساليب واللغات والاقتباسات الذهبية</li>
+    </ul>
+    <div class="modal-price"><span id="modal-price"></span><small>يمكنك الإلغاء في أي وقت</small></div>
+    <button type="button" id="upgrade-btn" class="primary-btn">
+      <span class="btn-label">اشترك وترقَّ الآن</span>
+      <span class="spinner" aria-hidden="true"></span>
+    </button>
+    <p id="upgrade-error" class="modal-error" hidden></p>
+    <p class="modal-secure">🔒 الدفع آمن عبر Stripe</p>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 

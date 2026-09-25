@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{ site_name }} — الاشتراك</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <section class="card checkout-card checkout-{{ status }}">
+      <div class="checkout-icon" aria-hidden="true">
+        {% if status == "success" %}✓{% elif status == "pending" %}…{% else %}!{% endif %}
+      </div>
+      <h1>
+        {% if status == "success" %}أهلًا بك في الباقة المدفوعة
+        {% elif status == "pending" %}الدفع قيد المعالجة
+        {% else %}تعذّر تأكيد الدفع{% endif %}
+      </h1>
+      <p>{{ message }}</p>
+      {% if status == "success" %}
+      <ul class="plan-features">
+        <li>تلخيص غير محدود للفيديوهات</li>
+        <li>منشورات خالية من العلامة المائية</li>
+      </ul>
+      {% endif %}
+      <a class="primary-btn link-btn" href="/">
+        {% if status == "success" %}ابدأ التلخيص الآن{% else %}العودة للصفحة الرئيسية{% endif %}
+      </a>
+    </section>
+  </main>
+</body>
+</html>

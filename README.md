@@ -88,7 +88,7 @@ for seg in result.segments:   # المقاطع مع التوقيت
 `POST /api/summarize`
 
 ```json
-{ "url": "https://youtu.be/VIDEO_ID", "language": "ar", "tone": "x", "num_posts": 3 }
+{ "url": "https://youtu.be/VIDEO_ID", "language": "ar", "tone": "x", "num_posts": 3, "thread": false }
 ```
 
 الاستجابة:
@@ -103,9 +103,46 @@ for seg in result.segments:   # المقاطع مع التوقيت
   "title": "...",
   "summary": "...",
   "key_points": ["..."],
-  "posts": ["..."]
+  "posts": ["..."],
+  "quotes": [{ "text": "...", "translation": "..." }],
+  "thread": false,
+  "watermarked": true,
+  "usage": { "plan": "free", "used": 1, "limit": 3, "remaining": 2 }
 }
 ```
+
+## الثريد والاقتباسات
+
+- **ثريد لـ X** (`"thread": true`): سلسلة تغريدات متصلة، يُضاف ترقيمها (`1/6`) تلقائيًا في سطر مستقل.
+  كل تغريدة تبقى ضمن 280 حرفًا شاملًا الترقيم والعلامة المائية؛ إن تجاوزت تغريدة حدّها يُطلب
+  من النموذج اختصارها.
+- **اقتباسات ذهبية**: أقوى 3 عبارات قيلت في الفيديو بلغته الأصلية مع ترجمتها. يتحقق الخادم من وجود
+  كل اقتباس حرفيًا في نص الفيديو ويحذف أي اقتباس غير موجود فيه.
+
+## الخطة المجانية والاشتراك (Stripe)
+
+- كل زائر يُعرّف بكوكي عشوائي (`yt2x_vid`)، وتُحفظ حصته في SQLite (`DATABASE_PATH`).
+- الخطة المجانية: `FREE_SUMMARY_LIMIT` محاولات (3 افتراضيًا)، تُحتسب المحاولة الناجحة فقط،
+  ويُضاف لكل منشور سطر ترويجي فيه `SITE_NAME` و`PUBLIC_BASE_URL`. الخطة المدفوعة بلا حد وبلا علامة مائية.
+- بعد انتهاء الحصة يرفض الخادم الطلبات (`402`) وتعرض الواجهة نافذة الترقية.
+
+إعداد Stripe:
+
+1. أنشئ منتجًا بسعر اشتراك شهري في لوحة Stripe، وضع `STRIPE_SECRET_KEY` و`STRIPE_PRICE_ID` في `.env`.
+2. اضبط `PUBLIC_BASE_URL` على رابط موقعك (يُستخدم لروابط العودة من صفحة الدفع).
+3. أضف Webhook يشير إلى `https://your-domain/api/stripe/webhook` مع الأحداث:
+   `checkout.session.completed` و`checkout.session.async_payment_succeeded`
+   و`customer.subscription.updated` و`customer.subscription.deleted`، وضع سرّه في `STRIPE_WEBHOOK_SECRET`.
+   للتجربة محليًا: `stripe listen --forward-to localhost:8000/api/stripe/webhook`.
+
+المسارات:
+
+| المسار | الوظيفة |
+|---|---|
+| `POST /api/checkout/session` | ينشئ جلسة Stripe Checkout ويعيد رابطها |
+| `GET /checkout?session_id=...` | صفحة العودة بعد الدفع: تتحقق من الجلسة وتفعّل الخطة المدفوعة |
+| `POST /api/stripe/webhook` | يفعّل الخطة أو يلغيها حسب أحداث Stripe (المصدر الموثوق) |
+| `GET /api/me` | خطة الزائر وعدد محاولاته المتبقية |
 
 ## الاختبارات
 

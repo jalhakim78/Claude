@@ -10,8 +10,11 @@ const loaderTitle = $("loader-title");
 const toastEl = $("toast");
 const resultEl = $("result");
 const numPostsEl = $("num-posts");
+const threadEl = $("thread");
 const postTemplate = $("post-template");
+const quoteTemplate = $("quote-template");
 const languageEl = $("language");
+const modal = $("upgrade-modal");
 
 const LANGUAGE_LABELS = { ar: "العربية", en: "English" };
 const TONE_LABELS = Object.fromEntries(
@@ -21,6 +24,9 @@ const TONE_LABELS = Object.fromEntries(
   ])
 );
 const PREFS_KEY = "yt2x-prefs";
+
+// حالة الحساب تأتي من الخادم مع الصفحة، وتتحدّث بعد كل تلخيص
+let account = JSON.parse($("account-data").textContent);
 
 // ---------- Helpers ----------
 
@@ -86,36 +92,109 @@ async function copyText(text, button, toastMessage = "تم نسخ المنشور
 // X تحسب الأحرف بنقاط Unicode، لذا نستخدم [...text] بدل text.length
 const charCount = (text) => [...text].length;
 
+function autoGrow(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+// ---------- الحصة والخطة ----------
+
+function isLocked() {
+  return account.usage.remaining === 0;
+}
+
+function renderAccount() {
+  const { plan, remaining, limit } = account.usage;
+  const pill = $("plan-pill");
+  const note = $("quota-note");
+
+  pill.classList.toggle("pro", plan === "pro");
+  pill.classList.toggle("empty", remaining === 0);
+  if (plan === "pro") {
+    pill.textContent = "⭐ الباقة الاحترافية";
+    note.hidden = true;
+  } else {
+    pill.textContent = remaining === 0 ? "🔒 ترقية الحساب" : `مجاني · ${remaining}/${limit}`;
+    note.hidden = false;
+    note.classList.toggle("empty", remaining === 0);
+    note.textContent =
+      remaining === 0
+        ? "انتهت محاولاتك المجانية — اشترك لفتح التلخيص غير المحدود"
+        : `متبقٍّ لك ${remaining} من ${limit} محاولات تلخيص مجانية`;
+  }
+
+  const label = submitBtn.querySelector(".btn-label");
+  submitBtn.classList.toggle("locked", isLocked());
+  label.textContent = isLocked() ? "🔒 اشترك لمتابعة التلخيص" : "لخّص الفيديو";
+}
+
+function openUpgradeModal() {
+  $("modal-limit").textContent = account.usage.limit ?? "";
+  $("modal-price").textContent = account.price_label;
+  $("upgrade-error").hidden = true;
+  if (!modal.open) modal.showModal();
+}
+
+$("plan-pill").addEventListener("click", () => {
+  if (account.usage.plan !== "pro") openUpgradeModal();
+});
+
+// إغلاق النافذة عند النقر خارجها
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) modal.close();
+});
+
+$("upgrade-btn").addEventListener("click", async () => {
+  const btn = $("upgrade-btn");
+  const errorEl = $("upgrade-error");
+  errorEl.hidden = true;
+  btn.disabled = true;
+  btn.classList.add("loading");
+  try {
+    const response = await fetch("/api/checkout/session", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.url) throw new Error(data.detail || "تعذّر بدء عملية الدفع");
+    window.location.href = data.url; // الانتقال إلى صفحة الدفع في Stripe
+  } catch (err) {
+    errorEl.textContent = err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message;
+    errorEl.hidden = false;
+    btn.disabled = false;
+    btn.classList.remove("loading");
+  }
+});
+
 // ---------- عدد المنشورات ----------
 
-const minPosts = Number(numPostsEl.min) || 1;
 const maxPosts = Number(numPostsEl.max) || 10;
 const decBtn = document.querySelector('[data-step="-1"]');
 const incBtn = document.querySelector('[data-step="1"]');
+
+// الثريد يحتاج تغريدتين على الأقل
+const minPosts = () => (threadEl.checked ? 2 : 1);
 
 // يعيد العدد إن كان صحيحًا ضمن المدى، وإلا null
 function readNumPosts() {
   const raw = numPostsEl.value.trim();
   if (!/^\d+$/.test(raw)) return null;
   const n = Number(raw);
-  return n >= minPosts && n <= maxPosts ? n : null;
+  return n >= minPosts() && n <= maxPosts ? n : null;
 }
 
 function syncNumPosts() {
   const n = readNumPosts();
   numPostsEl.parentElement.classList.toggle("invalid", n === null);
-  decBtn.disabled = n !== null && n <= minPosts;
+  decBtn.disabled = n !== null && n <= minPosts();
   incBtn.disabled = n !== null && n >= maxPosts;
 }
 
 function setNumPosts(value) {
-  numPostsEl.value = Math.min(Math.max(Math.round(value) || minPosts, minPosts), maxPosts);
+  numPostsEl.value = Math.min(Math.max(Math.round(value) || minPosts(), minPosts()), maxPosts);
   syncNumPosts();
 }
 
 [decBtn, incBtn].forEach((btn) =>
   btn.addEventListener("click", () =>
-    setNumPosts((readNumPosts() ?? minPosts) + Number(btn.dataset.step))
+    setNumPosts((readNumPosts() ?? minPosts()) + Number(btn.dataset.step))
   )
 );
 numPostsEl.addEventListener("input", syncNumPosts);
@@ -123,6 +202,21 @@ numPostsEl.addEventListener("input", syncNumPosts);
 numPostsEl.addEventListener("blur", () => {
   if (readNumPosts() === null) setNumPosts(Number(numPostsEl.value));
 });
+
+// ---------- وضع الثريد ----------
+
+function syncThreadMode() {
+  const on = threadEl.checked;
+  numPostsEl.min = minPosts();
+  $("num-posts-label").textContent = on ? "عدد تغريدات الثريد" : "عدد المنشورات";
+  $("num-posts-hint").textContent = on
+    ? `من 2 إلى ${maxPosts} تغريدات`
+    : `من 1 إلى ${maxPosts} منشورات`;
+  if (on && Number(numPostsEl.value) < 2) setNumPosts(Math.min(5, maxPosts));
+  syncNumPosts();
+}
+
+threadEl.addEventListener("change", syncThreadMode);
 
 // ---------- حفظ التفضيلات (اختياري؛ الصفحة تعمل بدونه) ----------
 
@@ -134,6 +228,7 @@ function savePrefs() {
         language: languageEl.value,
         tone: form.elements.tone.value,
         numPosts: readNumPosts(),
+        thread: threadEl.checked,
       })
     );
   } catch {}
@@ -146,7 +241,9 @@ function loadPrefs() {
   } catch {}
   if (prefs.language in LANGUAGE_LABELS) languageEl.value = prefs.language;
   if (prefs.tone in TONE_LABELS) form.elements.tone.value = prefs.tone;
+  threadEl.checked = prefs.thread === true;
   setNumPosts(prefs.numPosts ?? Math.min(3, maxPosts));
+  syncThreadMode();
 }
 
 loadPrefs();
@@ -176,7 +273,7 @@ function renderPost(text, limit, canShareToX) {
   const shareEl = node.querySelector(".share");
 
   const update = () => {
-    const value = textEl.innerText.trim();
+    const value = textEl.value.trim();
     const n = charCount(value);
     countEl.textContent = `${n} / ${limit}`;
     countEl.classList.toggle("warn", n > limit * 0.93 && n <= limit);
@@ -184,17 +281,28 @@ function renderPost(text, limit, canShareToX) {
     if (canShareToX) {
       shareEl.href = `https://x.com/intent/post?text=${encodeURIComponent(value)}`;
     }
+    autoGrow(textEl);
   };
 
   // منشورات LinkedIn أطول من حد X، لذا نكتفي بزر النسخ لها
   shareEl.hidden = !canShareToX;
-
-  textEl.textContent = text;
+  textEl.value = text;
   textEl.addEventListener("input", update);
   node.querySelector(".copy").addEventListener("click", (e) =>
-    copyText(textEl.innerText.trim(), e.currentTarget)
+    copyText(textEl.value.trim(), e.currentTarget)
   );
-  update();
+  // الارتفاع الصحيح يُحسب بعد إضافة العنصر للصفحة
+  requestAnimationFrame(update);
+  return node;
+}
+
+function renderQuote({ text, translation }) {
+  const node = quoteTemplate.content.firstElementChild.cloneNode(true);
+  node.querySelector(".quote-text").textContent = text;
+  node.querySelector(".quote-translation").textContent = translation;
+  node.querySelector(".copy-quote").addEventListener("click", (e) =>
+    copyText(`«${text}»`, e.currentTarget, "تم نسخ الاقتباس")
+  );
   return node;
 }
 
@@ -217,25 +325,39 @@ function renderResult(data) {
       return li;
     })
   );
-  const canShareToX = data.char_limit <= 280;
-  $("posts").replaceChildren(
-    ...data.posts.map((post) => renderPost(post, data.char_limit, canShareToX))
+
+  const postsEl = $("posts");
+  postsEl.classList.toggle("is-thread", data.thread);
+  postsEl.replaceChildren(
+    ...data.posts.map((post) => renderPost(post, data.char_limit, data.char_limit <= 280))
   );
-  $("posts-meta").textContent =
-    `${data.posts.length} منشورات · ${TONE_LABELS[data.tone] ?? data.tone} · ${LANGUAGE_LABELS[data.language] ?? data.language}`;
+
+  const unit = data.thread ? "تغريدات" : "منشورات";
+  const parts = [
+    data.thread ? `🧵 ثريد من ${data.posts.length} تغريدات` : `${data.posts.length} منشورات`,
+    TONE_LABELS[data.tone] ?? data.tone,
+    LANGUAGE_LABELS[data.language] ?? data.language,
+  ];
+  $("posts-meta").textContent = parts.join(" · ");
+  $("copy-all").querySelector("span").textContent = data.thread ? "نسخ الثريد" : "نسخ الكل";
+  $("copy-all").dataset.label = $("copy-all").querySelector("span").textContent;
 
   const noteEl = $("posts-note");
-  noteEl.hidden = data.posts.length >= data.requested_posts;
-  noteEl.textContent = `تم توليد ${data.posts.length} من أصل ${data.requested_posts} منشورات فقط؛ المحتوى لم يكفِ لأفكار مختلفة أكثر.`;
+  noteEl.hidden = data.posts.length === data.requested_posts;
+  noteEl.textContent = `تم توليد ${data.posts.length} ${unit} بدل ${data.requested_posts} المطلوبة؛ المحتوى لم يكفِ لأفكار مختلفة أكثر.`;
+
+  $("quotes").replaceChildren(...data.quotes.map(renderQuote));
+  $("quotes-box").hidden = data.quotes.length === 0;
 
   resultEl.hidden = false;
   resultEl.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 $("copy-all").addEventListener("click", (e) => {
+  const separator = $("posts").classList.contains("is-thread") ? "\n\n" : "\n\n---\n\n";
   const all = [...document.querySelectorAll("#posts .post-text")]
-    .map((el) => el.innerText.trim())
-    .join("\n\n---\n\n");
+    .map((el) => el.value.trim())
+    .join(separator);
   copyText(all, e.currentTarget, "تم نسخ كل المنشورات");
 });
 
@@ -243,8 +365,13 @@ $("copy-all").addEventListener("click", (e) => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const url = urlInput.value.trim();
 
+  if (isLocked()) {
+    openUpgradeModal();
+    return;
+  }
+
+  const url = urlInput.value.trim();
   if (!YT_RE.test(url)) {
     urlInput.parentElement.classList.add("invalid");
     showStatus("الصق رابط فيديو يوتيوب صحيحًا", true);
@@ -255,7 +382,7 @@ form.addEventListener("submit", async (event) => {
   const numPosts = readNumPosts();
   if (numPosts === null) {
     syncNumPosts();
-    showStatus(`عدد المنشورات يجب أن يكون رقمًا صحيحًا من ${minPosts} إلى ${maxPosts}`, true);
+    showStatus(`العدد يجب أن يكون رقمًا صحيحًا من ${minPosts()} إلى ${maxPosts}`, true);
     numPostsEl.focus();
     return;
   }
@@ -279,22 +406,40 @@ form.addEventListener("submit", async (event) => {
         language: languageEl.value,
         tone: form.elements.tone.value,
         num_posts: numPosts,
+        thread: threadEl.checked,
       }),
     });
 
     const data = await response.json().catch(() => ({}));
+    if (response.status === 402) {
+      account.usage.remaining = 0;
+      throw Object.assign(new Error(data.detail), { quota: true });
+    }
     if (!response.ok) {
       const detail = typeof data.detail === "string" ? data.detail : null;
       throw new Error(detail || `حدث خطأ غير متوقع (${response.status})`);
     }
 
+    account.usage = data.usage;
     setLoading(false);
     renderResult(data);
   } catch (err) {
-    const message = err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message;
-    showStatus(message, true);
+    if (err.quota) {
+      openUpgradeModal();
+    } else {
+      showStatus(err instanceof TypeError ? "تعذّر الاتصال بالخادم" : err.message, true);
+    }
   } finally {
     clearTimeout(stageTimer);
     setLoading(false);
+    renderAccount();
   }
 });
+
+// ---------- البداية ----------
+
+renderAccount();
+if (new URLSearchParams(location.search).get("checkout") === "cancelled") {
+  showToast("تم إلغاء عملية الدفع");
+  history.replaceState(null, "", location.pathname);
+}

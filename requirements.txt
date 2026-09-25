@@ -5,6 +5,7 @@ python-dotenv>=1.0
 anthropic>=1.8
 youtube-transcript-api>=1.2
 requests>=2.31
+stripe>=15
 
 # للتطوير والاختبار
 pytest>=8
